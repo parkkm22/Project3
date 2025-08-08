@@ -3215,6 +3215,22 @@ with st.sidebar:
     st.markdown('</div>', unsafe_allow_html=True)
 
 
+# --- SIDEBAR NAVIGATION ---
+st.sidebar.markdown("## 🧭 네비게이션")
+page = st.sidebar.selectbox(
+    "페이지 선택",
+    ["🏗️ 메인", "📝 AI 일일작업보고", "💥 발파데이터 자동화", "🤖 AI 챗봇"],
+    index=0
+)
+
+# 페이지별 네비게이션
+if page == "📝 AI 일일작업보고":
+    st.switch_page("pages/1_AI_일일작업보고_생성기.py")
+elif page == "💥 발파데이터 자동화":
+    st.switch_page("pages/2_발파데이터_자동화계측기.py")
+elif page == "🤖 AI 챗봇":
+    st.switch_page("pages/3_AI_챗봇.py")
+
 # --- MAIN CONTENT ---
 st.markdown("""
 <div style="text-align: center; padding: 20px 0;">
