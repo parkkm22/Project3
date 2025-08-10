@@ -1,5 +1,19 @@
+# Construction Status Management System Dependencies
+# Streamlit 웹 애플리케이션 프레임워크
 streamlit>=1.28.0
+
+# 데이터 처리 및 분석
 pandas>=2.0.0
+
+# 고급 데이터 그리드 컴포넌트
 streamlit-aggrid>=0.3.4
+
+# Supabase 데이터베이스 연동
 supabase>=2.0.0
-python-dotenv>=1.0.0 
+
+# 환경변수 관리
+python-dotenv>=1.0.0
+
+# 추가 권장 패키지
+# numpy>=1.24.0  # pandas 의존성
+# requests>=2.31.0  # HTTP 요청 처리 
