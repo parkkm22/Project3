@@ -1,0 +1,525 @@
+import streamlit as st
+import re
+import requests
+import json
+import pandas as pd
+
+# --- CONSTANTS & API SETUP ---
+# Gemini API 설정은 기존 코드와 동일하게 유지합니다.
+API_KEY = "AIzaSyD69-wKYfZSID327fczrkx-JveJdGYIUIk"
+API_ENDPOINT = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={API_KEY}"
+
+# --- SESSION STATE ---
+def initialize_report_session_state():
+    """페이지 1의 세션 상태를 초기화합니다."""
+    if 'PROMPT_PAGE1' not in st.session_state:
+        st.session_state.PROMPT_PAGE1 = """
+# INSTRUCTIONS
+1. 출력은 코드블럭으로 감싸고, "MAIN SET" 양식을 유지하여 작성할 것
+2. 입력된 USER TEXT 3개 항목을 기반으로 "MAIN SET"의 각 위치에 맞는 내용만 채워서 하나의 보고서로 취합할 것
+3. 작업 위치는 아래 순서에 따라 오름차순으로 정렬하고, 숫자 번호(예: 1), 2))로 구분된 섹션은 서로 완전히 독립된 내용으로 취급 
+   - 1. 본선터널(1구간)
+   - 2. 신풍정거장
+   - 3. 신풍정거장 환승통로
+   - 4. 본선터널(2구간)
+   - 5. 도림사거리정거장
+4. 날짜는 USER TEXT에 명시된 날짜 중 첫 번째 항목 기준으로 작성
+5. "※ 안전관리 중점 POINT"는 중복 없이 10개 이하 항목을 추출하여 맨 하단에 1회만 작성
+6. "■ 총 인원" 및 "■ 총 장비" 항목은 전체 투입인원 및 장비를 단순 합산하여 작성하며, 위치별 공종 구분 없이 전체 수량만 작성
+7. QA-CHECKLIST(자동 검증 후 변환로그 출력)
+- 매핑 누락 여부: USER TEXT 내 단어 중 매핑되지 않은 항목 확인
+- 변환로그: 각 USER TEXT(USER TEXT 1, USER TEXT 2, USER TEXT 3)별로 구분하여, 어떤 USER TEXT에서 변경이 발생했는지 식별자와 함께 변경된 [원문] 및 [결과]를 다음 Markdown 테이블 형식으로 출력한다.
+
+  `USER TEXT 1 변경사항:`
+  | 원문 | 결과 |
+  |---|---|
+  | 예시 원문1 | 예시 결과1 |
+
+  `USER TEXT 2 변경사항:`
+  | 원문 | 결과 |
+  |---|---|
+  | 예시 원문3 | 예시 결과3 |
+
+  `USER TEXT 3 변경사항:`
+  | 원문 | 결과 |
+  |---|---|
+  | 예시 원문4 | 예시 결과4 |
+
+- 만약 특정 USER TEXT에서 변경사항이 없다면, 해당 섹션에 "| 변경사항 없음 | - |" 로 표기한다.
+- 전체적으로 변경사항이 전혀 없다면, "모든 USER TEXT에서 변경사항 없음"으로 표기한다.
+
+# Mapping Rules
+1. 인원 
+- 표기 순서: ①직영반장 → ②목공 → ③철근공 → ④연수생 → ⑤신호수 → ⑥그 외
+- "직영"은 연수생에 합산 (단, 직영반장은 별도 표기)
+- "0명", "-명" 등은 제외하고, 인원 항목이 없을 경우 "없음"으로 표기
+- 인원은 슬래시(/)로 구분
+- '/ 앞뒤에 공백이 있든 없든 무관하며, 둘 다 정상적으로 인식 및 합산됨'
+-"직영"은 연수생에 포함하여 계산
+2. 장비
+- ""0대", "-대" 등은 제외하고, 장비 항목이 없을 경우 "없음"으로 표기
+- 띄어쓰기, 대소문자, 괄호 등 오타 가능성을 감안하여 매핑
+- 장비는 슬래시(/)로 구분
+- '/ 앞뒤에 공백이 있든 없든 무관하며, 둘 다 정상적으로 인식 및 합산됨'
+3. ※ 안전관리 중점 POINT (매우 중요: 반드시 10개 이하로 제한)
+- 각 입력의 하단에서 "5대 안전사고(추락, 협착, 낙하, 질식, 폭발)"와 관련 있는 문장 중 정확히 최대 10개만 선택하여 출력
+- 절대로 10개를 초과하지 말 것. 11개 이상 출력 시 오류로 간주
+- 중복 항목 제거 후 출력
+- 순서는 추출된 순서를 그대로 유지
+- 만약 추출된 항목이 10개를 넘는다면 가장 중요한 10개만 선택하여 출력
+4. "총 인원" 및 "총 장비" 계산 지침 (매우 중요, 반드시 정확하게 수행할 것):
+- 목표: USER TEXT 1, USER TEXT 2, USER TEXT 3 전체에 걸쳐 언급된 모든 인원수와 장비수를 정확히 합산한다.
+- 인원 합산:
+    a. USER TEXT 1, 2, 3에서 '숫자+명' 패턴을 모두 찾는다. (예: "목공 5명", "인부 10명")
+    b. '직영반장'으로 명시된 인원은 합산에서 제외한다. '0명', '-명', '없음' 등 수치가 없는 항목도 제외한다.
+    c. 위에서 찾은 모든 유효 인원수를 더하여 '총 인원'을 계산한다.
+- 장비 합산:
+    a. USER TEXT 1, 2, 3에서 '숫자+대' 패턴을 모두 찾는다. (예: "굴삭기 2대", "덤프 5대")
+    b. '0대', '-대', '없음' 등 수치가 없는 항목은 제외한다.
+    c. 위에서 찾은 모든 유효 장비수를 더하여 '총 장비'를 계산한다.
+- 최종 검증: 계산된 '총 인원'과 '총 장비'가 입력된 모든 개별 수치들의 실제 총합과 일치하는지 다시 한번 확인한다.
+- 출력 형식: 최종 결과는 "■ 총 인원 : [계산된 총 인원수]명", "■ 총 장비 : [계산된 총 장비수]대" 형식으로 출력한다. 절대로 '##명' 또는 '##대'를 사용하지 않는다.
+5. 타설 관련 규칙
+- "■ 작업내용"에 "타설"이라는 단어가 포함되면 "Con'c 타설"로 자동 치환
+6. 매핑 딕셔너리 적용  
+- "장비명"+"(규격)"
+   예시:
+   앵글크레인 35T → 앵글크레인(35T), b/h08lc → B/H(08LC)
+-"B/H08W" → "B/H(08W)"
+-"백호06W"→ "B/H(06W)"
+-"25톤 카고크레인" → "카고크레인(25T)"
+-"크레인(25T)" → "카고크레인(25T)"
+-"기계타설공" → "타설공"    
+-"철근연수생" 또는 "목공연수생" → "연수생"    
+-"5톤트럭" → "화물차(5T)"    
+-"카리프트" → "카리프트공"    
+-"20톤크레인" → "하이드로크레인(20T)"    
+-"라이닝폼조립" → "라이닝폼공"    
+-"S/C타설팀" → "터널공"    
+-"목수" → "목공"    
+- 사전에 없는 항목 → 유사항목으로 추출
+
+# MAIN SET(출력예시)
+신안산선 4-1공구(포스코이앤씨)
+2025년 00월 00일(0) 작업계획보고
+
+1.본선터널(1구간, 대림-신풍)
+■작업내용
+- 
+■시공현황(누계/설계)
+- 
+■ 투입현황 (주간)
+- 인원 :
+- 장비 :
+
+2.신풍정거장
+ 1) 정거장 터널
+ ■ 작업내용
+ - 
+ ■ 시공현황(누계/설계)
+ - 
+ ■ 투입현황 (주간)
+ - 인원 : 
+ - 장비 : 
+
+ 2) 주출입구 연결터널
+  (1) PCB
+  ■ 작업내용
+ - PCB(정화조 방면) : 
+ - PCB(정거장 방면) : 
+ - PCB(환승통로 방면) : 
+  ■ 시공현황(누계/설계)
+ - 정거장 방면
+   ㄴ 
+ - 환승통로 방면
+   ㄴ 
+  ■ 투입현황 (주간)
+ - 인원 : 
+ - 장비 : 
+
+ (2) PCC
+  ■ 작업내용
+ - 
+  ■ 시공현황(누계/설계)
+   ㄴ 
+  ■ 투입현황 (주간)
+   - 인원 : 
+   - 장비 : 
+
+ (3) PCD(환승통로 M/W구간)
+  ■ 작업내용
+ - 
+  ■ 시공현황(누계/설계)
+   ㄴ 
+  ■ 투입현황 (주간)
+   - 인원 : 
+   - 장비 : 
+
+ (4) PHA
+  ■ 작업내용
+ - 
+  ■ 시공현황(누계/설계)
+   ㄴ 
+  ■ 투입현황 (주간)
+   - 인원 : 
+   - 장비 : 
+
+ 3) 특별피난계단
+  ■ 작업내용
+ - 
+  ■ 투입현황 (주간)
+ - 인원 : 
+ - 장비 : 
+
+ 4) 외부출입구(#2)
+  ■ 작업내용
+ - 
+  ■ 시공현황(누계/설계)
+ - 
+  ■ 투입현황 (주간)
+ - 인원 : 
+ - 장비 : 
+
+3. 신풍정거장 환승통로
+ 1) 환승 터널
+  ■ 작업 내용
+ - 연결터널(PCF) : 
+ - 경사터널(PCE) :
+  ■ 시공 현황
+ - 연결터널(PCF) : 
+ - 경사터널(PCE) : 
+  ■ 투입 현황
+ - 인원 : 
+ - 장비 :
+
+ 2) 개착 BOX
+  ■ 작업 내용
+ - 보라매 방면 :
+ - 대림 방면 :
+  ■ 시공 현황
+ - 보라매 방면(구조물) :
+ - 대림 방면(개착) :
+  ■ 투입 현황
+ - 인원 : 
+ - 장비 :
+
+4. 본선터널(2구간, 신풍~도림)
+■작업내용
+- 
+■시공현황(누계/설계)
+- 
+■ 투입현황
+- 인원 : 
+- 장비 : 
+
+5. 도림사거리정거장
+ 1) 정거장 터널
+ ■ 작업내용
+ - 
+ ■ 시공현황(누계/설계)
+ - 
+ ■ 투입현황
+ - 인원 : 
+ - 장비 : 
+
+ 2) 출입구#1(PCC,PCA,PHA) 수직구 연결터널
+ ■ 작업내용
+ -
+ ■ 시공현황
+ -
+  ㄴ 
+ ■ 투입현황
+ - 인원 : 
+ - 장비 : 
+
+ 3) 출입구#2 (PCC, PHB) 수직구 연결터널
+ ■ 작업내용
+ -
+ ■ 시공현황(누계/설계)
+ -   
+ ■ 투입현황
+ - 인원 :
+ - 장비 : 
+
+■ 총 인원 : ##명
+■ 총 장비 : ##대
+
+※ 안전관리 중점 POINT
+1)
+2)
+3)
+4)
+5)
+6)
+7)
+8)
+9)
+10)
+"""
+    # 페이지별 입력/출력 상태 저장
+    states = {
+        'project_info': '', 'today_work': '', 'issues_solutions': '',
+        'generated_report': '', 'qa_log': '', 'is_editing': False,
+        'report_edit_content': ''
+    }
+    for key, value in states.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+
+# --- HELPER FUNCTIONS ---
+def call_gemini_api(prompt):
+    """Gemini API를 호출하는 함수"""
+    headers = {"Content-Type": "application/json"}
+    data = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "safetySettings": [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+        ]
+    }
+    try:
+        response = requests.post(API_ENDPOINT, headers=headers, data=json.dumps(data), timeout=180)
+        response.raise_for_status()
+        result = response.json()
+        return result['candidates'][0]['content']['parts'][0]['text']
+    except requests.exceptions.RequestException as e:
+        st.error(f"[API 호출 오류] {e}")
+        return None
+    except (KeyError, IndexError) as e:
+        st.error(f"[API 응답 처리 오류] {e}\n응답 내용: {result}")
+        return None
+
+def process_api_response(api_result, all_inputs):
+    """API 응답을 후처리하고 QA 로그를 분리합니다."""
+    # QA-CHECKLIST 내용 추출 및 제거
+    qa_log_content = ''
+    qa_patterns = [
+        re.compile(r'QA-CHECKLIST[\s\S]*', re.IGNORECASE),
+        re.compile(r'QA[\s-]*CHECKLIST[\s\S]*', re.IGNORECASE),
+        re.compile(r'변환로그[\s\S]*', re.IGNORECASE),
+        re.compile(r'USER TEXT \d+[\s\S]*')
+    ]
+    for pattern in qa_patterns:
+        match = pattern.search(api_result)
+        if match:
+            qa_log_content = match.group(0)
+            api_result = api_result.replace(qa_log_content, '')
+            break
+    
+    if not qa_log_content:
+        qa_log_content = '추출된 변환로그가 없습니다.'
+
+    # 코드 블록 및 불필요한 마크업 제거
+    api_result = re.sub(r'^```[a-zA-Z]*\s*\n?|```\s*$', '', api_result.strip())
+    api_result = re.sub(r'^\s*# MAIN SET\s*\n?', '', api_result, flags=re.IGNORECASE)
+    api_result = api_result.replace('**', '')
+
+    # "신안산선..." 문자열 변경
+    api_result = api_result.replace('신안산선 4-1공구(포스코이앤씨)', '●신안산선 4-1공구(포스코이앤씨)')
+    
+    # 인원/장비 합산
+    total_person = sum(int(n) for n in re.findall(r'(\d+)\s*명', all_inputs))
+    total_equip = sum(int(n) for n in re.findall(r'(\d+)\s*대', all_inputs))
+
+    final_report = re.sub(r'■ 총 인원 : .*', f'■ 총 인원 : {total_person}명', api_result)
+    final_report = re.sub(r'■ 총 장비 : .*', f'■ 총 장비 : {total_equip}대', final_report)
+
+    return final_report.strip(), qa_log_content.strip()
+
+def format_qa_log_to_markdown(qa_log):
+    """QA 로그 텍스트를 마크다운 테이블로 변환합니다."""
+    if not qa_log or '없습니다' in qa_log:
+        return qa_log
+
+    qa_log = re.sub(r'QA-CHECKLIST.*?변환로그:', '', qa_log, flags=re.DOTALL | re.IGNORECASE).strip()
+    sections = re.split(r'(?=USER TEXT \d+[^:`]*:`)', qa_log)
+    markdown_output = ""
+
+    for section in sections:
+        if not section.strip():
+            continue
+        
+        header_match = re.match(r'USER TEXT (\d+)[^:`]*:`', section)
+        if header_match:
+            user_text_num = header_match.group(1)
+            content = section[header_match.end():].strip()
+            
+            label_map = {
+                '1': st.session_state.get('project_info_label', '본선터널(1구간), 신풍정거장'),
+                '2': st.session_state.get('today_work_label', '신풍 환승통로'),
+                '3': st.session_state.get('issues_solutions_label', '본선터널(2구간), 도림정거장'),
+            }
+            
+            markdown_output += f"#### {label_map.get(user_text_num, f'USER TEXT {user_text_num}')}\n"
+            
+            if "| 변경사항 없음 |" in content:
+                markdown_output += "> 변경사항 없음\n\n"
+            else:
+                lines = [line.strip() for line in content.split('\n') if line.strip() and line.startswith('|')]
+                if len(lines) > 1:
+                    markdown_output += '\n'.join(lines) + '\n\n'
+                else:
+                    markdown_output += f"```\n{content}\n```\n\n"
+        else:
+            markdown_output += f"```\n{section}\n```\n\n"
+
+    return markdown_output
+
+# --- UI & LOGIC ---
+st.set_page_config(
+    page_title="AI 일일작업보고 생성기",
+    page_icon="https://raw.githubusercontent.com/primer/octicons/main/icons/note-16.svg",
+    layout="wide"
+)
+initialize_report_session_state()
+
+# 공통 사이드바 스타일 추가
+st.markdown("""
+<style>
+    /* 사이드바 공통 스타일 */
+    [data-testid="stSidebar"] {
+        background-color: #F8F9FA;
+        border-right: 1px solid #E5E7EB;
+    }
+    [data-testid="stSidebar"] h1 {
+        font-size: 1.5rem;
+        color: #1E3A8A;
+        font-weight: 700;
+        padding: 1rem 0;
+    }
+    /* 메인 폰트 (아이콘 충돌 방지를 위해 [class*="st-"] 선택자 제거) */
+    html, body, .stTextArea, .stButton>button, .stFileUploader, .stSelectbox {
+        font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    }
+    /* 메인 컨테이너 */
+    .main .block-container {
+        padding: 2rem 2rem 5rem 2rem;
+        max-width: 1000px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+st.title("✨ AI 일일작업보고 취합본 생성기")
+st.write("발주처/공단 보고용 텍스트를 간편하게 생성하세요.")
+st.markdown("---")
+
+with st.container(border=True):
+    st.session_state.project_info = st.text_area(
+        label="본선터널(1구간), 신풍정거장", 
+        value=st.session_state.project_info, 
+        placeholder="위치별 작업내용을 입력하세요",
+        height=150,
+        key="project_info_input"
+    )
+    st.session_state.today_work = st.text_area(
+        label="신풍 환승통로",
+        value=st.session_state.today_work,
+        placeholder="위치별 작업내용을 입력하세요",
+        height=200,
+        key="today_work_input"
+    )
+    st.session_state.issues_solutions = st.text_area(
+        label="본선터널(2구간), 도림정거장",
+        value=st.session_state.issues_solutions,
+        placeholder="위치별 작업내용을 입력하세요",
+        height=150,
+        key="issues_solutions_input"
+    )
+
+col1, col2 = st.columns(2)
+with col1:
+    if st.button("📄 보고서 생성", use_container_width=True, type="primary"):
+        if not all([st.session_state.project_info, st.session_state.today_work, st.session_state.issues_solutions]):
+            st.warning("모든 필드를 입력해주세요.")
+        else:
+            with st.spinner("🤖 AI가 보고서를 생성 중입니다..."):
+                user_text = (
+                    f"USER TEXT 1: {st.session_state.project_info}\n"
+                    f"USER TEXT 2: {st.session_state.today_work}\n"
+                    f"USER TEXT 3: {st.session_state.issues_solutions}"
+                )
+                full_prompt = f"{st.session_state.PROMPT_PAGE1}\n\n{user_text}"
+                api_result = call_gemini_api(full_prompt)
+
+                if api_result:
+                    report, qa_log = process_api_response(api_result, user_text)
+                    st.session_state.generated_report = report
+                    st.session_state.report_edit_content = report
+                    st.session_state.qa_log = qa_log
+                    st.session_state.is_editing = False
+                    st.toast("✅ 보고서 생성 완료!", icon="🎉")
+
+with col2:
+    if st.button("🗑️ 초기화", use_container_width=True):
+        st.session_state.project_info = ''
+        st.session_state.today_work = ''
+        st.session_state.issues_solutions = ''
+        st.session_state.generated_report = ''
+        st.session_state.qa_log = ''
+        st.session_state.is_editing = False
+        st.rerun()
+
+with st.expander("⚙️ 프롬프트 수정"):
+    edited_prompt = st.text_area(
+        "프롬프트(지시문) 수정",
+        value=st.session_state.PROMPT_PAGE1,
+        height=300,
+        key="prompt_edit_area"
+    )
+    if st.button("프롬프트 저장", key="save_prompt"):
+        st.session_state.PROMPT_PAGE1 = edited_prompt
+        st.toast("프롬프트가 저장되었습니다.", icon="💾")
+
+if st.session_state.generated_report:
+    st.markdown("---")
+    st.subheader("📋 생성된 보고서")
+
+    if st.session_state.is_editing:
+        st.session_state.report_edit_content = st.text_area(
+            "보고서 수정",
+            value=st.session_state.report_edit_content,
+            height=400,
+            label_visibility="collapsed"
+        )
+        
+        edit_col1, edit_col2 = st.columns(2)
+        with edit_col1:
+            if st.button("💾 저장", use_container_width=True, type="primary"):
+                st.session_state.generated_report = st.session_state.report_edit_content
+                st.session_state.is_editing = False
+                st.toast("보고서가 수정되었습니다.", icon="✏️")
+                st.rerun()
+        with edit_col2:
+            if st.button("❌ 취소", use_container_width=True):
+                st.session_state.is_editing = False
+                st.session_state.report_edit_content = st.session_state.generated_report
+                st.rerun()
+    else:
+        st.text_area(
+            "보고서 내용",
+            value=st.session_state.generated_report,
+            height=400,
+            key="report_output_area",
+            label_visibility="collapsed"
+        )
+        
+        btn_col1, btn_col2, btn_col3 = st.columns([1,1,2])
+        with btn_col1:
+            if st.button("✏️ 수정", use_container_width=True):
+                st.session_state.is_editing = True
+                st.rerun()
+        with btn_col2:
+            if st.button("📲 공사일보 자동화 시스템으로 보내기", use_container_width=True):
+                st.session_state.report_to_transfer = st.session_state.generated_report
+                st.toast("✅ 보고서 내용이 전달되었습니다. 다음 페이지에서 확인하세요.")
+                st.switch_page("pages/2_공사일보_자동화.py")
+        
+        with st.expander("📋 복사용 텍스트 (우측 상단 복사 버튼 클릭)", expanded=False):
+            st.code(st.session_state.generated_report, language=None)
+
+    if st.session_state.qa_log:
+        st.subheader("📊 변경사항")
+        formatted_qa_log = format_qa_log_to_markdown(st.session_state.qa_log)
+        st.markdown(formatted_qa_log, unsafe_allow_html=True)

@@ -1,0 +1,2129 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Leaflet | Advanced DXF Viewer</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        html, body, #map { margin: 0; height: 100%; width: 100%; overflow: hidden; }
+        
+        /* 좌측 메인 컨트롤 패널 */
+        .main-control-panel {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 320px;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.98);
+            border-right: 2px solid #e0e0e0;
+            z-index: 1000;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            overflow-y: auto;
+        }
+        
+        .main-control-panel h3 {
+            margin: 0;
+            padding: 20px 20px 15px 20px;
+            color: #333;
+            font-size: 18px;
+            border-bottom: 2px solid #007bff;
+            background: #f8f9fa;
+        }
+        
+        .control-section {
+            padding: 15px 20px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .control-section h4 {
+            margin: 0 0 12px 0;
+            color: #007bff;
+            font-size: 14px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+        }
+        
+        .control-section h4 i {
+            margin-right: 8px;
+            font-size: 16px;
+        }
+        
+        .file-upload-section {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        
+        .file-upload-section input[type="file"] {
+            width: 100%;
+            padding: 8px;
+            border: 2px dashed #007bff;
+            border-radius: 6px;
+            background: white;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        
+        .file-upload-section input[type="file"]:hover {
+            border-color: #0056b3;
+            background: #f0f8ff;
+        }
+        
+        #status {
+            margin-top: 10px;
+            padding: 8px 12px;
+            background: #e7f3ff;
+            border-left: 4px solid #007bff;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #0056b3;
+        }
+        
+        #layer-control {
+            max-height: 300px;
+            overflow-y: auto;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 10px;
+        }
+        
+        .layer-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .layer-item:last-child {
+            border-bottom: none;
+        }
+        
+        .layer-item input[type="checkbox"] {
+            margin-right: 10px;
+            transform: scale(1.2);
+        }
+        
+        .layer-item label {
+            flex: 1;
+            font-size: 12px;
+            color: #333;
+            cursor: pointer;
+        }
+        
+        .layer-opacity {
+            width: 60px;
+            height: 20px;
+            margin-left: 10px;
+        }
+        
+        /* 도구 패널 스타일 */
+        .tools-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.98);
+            padding: 20px;
+            border-radius: 12px;
+            border: 2px solid #e0e0e0;
+            z-index: 1000;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+            min-width: 180px;
+        }
+        
+        .tools-panel h4 {
+            margin: 0 0 15px 0;
+            color: #333;
+            font-size: 14px;
+            text-align: center;
+            font-weight: 600;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 8px;
+        }
+        
+        .tool-button {
+            display: block;
+            width: 100%;
+            padding: 12px 15px;
+            margin: 8px 0;
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 500;
+            color: #555;
+        }
+        
+        .tool-button:hover {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,123,255,0.3);
+        }
+        
+        .tool-button.active {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+            box-shadow: 0 4px 12px rgba(0,123,255,0.3);
+        }
+        
+        .tool-button i {
+            display: block;
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+        
+        /* 모달 스타일 */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+        
+        .modal-content {
+            background-color: white;
+            margin: 15% auto;
+            padding: 20px;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 400px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .modal-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        
+        .close {
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        .close:hover {
+            color: #000;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .form-group input, .form-group textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .form-group textarea {
+            height: 80px;
+            resize: vertical;
+        }
+        
+        .btn {
+            background: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        
+        .btn:hover {
+            background: #0056b3;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+        }
+        
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+        
+        /* 태그 관련 스타일 */
+        .tag-preview {
+            transition: all 0.2s ease;
+        }
+        
+        .tag-preview:hover {
+            transform: scale(1.05);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        /* 태그가 있는 마커 스타일 */
+        .location-marker-with-tags {
+            background: transparent !important;
+            border: none !important;
+        }
+        
+        .location-marker-with-tags .leaflet-marker-icon {
+            background: transparent !important;
+            border: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+ 
+     <div class="main-control-panel">
+        <h3>GIS/CAD 뷰어</h3>
+        <div class="control-section">
+            <h4>📁 DXF 파일 업로드</h4>
+            <div class="file-upload-section">
+                <input type="file" id="dxf-input" accept=".dxf">
+                <div id="status">파일을 선택해주세요.</div>
+            </div>
+        </div>
+        <div class="control-section">
+            <h4>🗺️ GeoJSON 노선 로드</h4>
+            <div class="file-upload-section">
+                <input type="file" id="geojson-input" accept=".geojson">
+                <div id="geojson-status">노선 파일을 선택해주세요.</div>
+            </div>
+        </div>
+        <div class="control-section">
+            <h4>🗂️ 레이어 관리</h4>
+            <div id="layer-control">
+                <div style="color: #666; font-size: 11px; text-align: center; padding: 20px;">
+                    DXF 파일을 업로드하면 레이어가 여기에 표시됩니다.
+                </div>
+            </div>
+        </div>
+        <div class="control-section">
+            <h4>📍 위치 정보</h4>
+            <div id="location-info" style="font-size: 12px; color: #666;">
+                지도에서 위치를 추가하면 여기에 표시됩니다.
+            </div>
+        </div>
+        <div class="control-section">
+            <h4>💥 발파 정보</h4>
+            <div id="blasting-info" style="font-size: 12px; color: #666;">
+                발파 위치와 계측 위치를 추가하면 여기에 표시됩니다.
+            </div>
+        </div>
+    </div>
+     
+     <!-- 도구 패널 -->
+     <div class="tools-panel">
+        <h4>🛠️ 도구</h4>
+        <button class="tool-button" id="add-location-btn">
+            <i>📍</i>
+            위치 추가
+        </button>
+        <button class="tool-button" id="add-blasting-btn">
+            <i>💥</i>
+            발파 위치
+        </button>
+        <button class="tool-button" id="add-measurement-btn">
+            <i>📊</i>
+            계측 위치
+        </button>
+        <button class="tool-button" id="measure-distance-btn">
+            <i>📏</i>
+            거리 계산
+        </button>
+        <button class="tool-button" id="clear-all-btn">
+            <i>🗑️</i>
+            전체 삭제
+        </button>
+    </div>
+    
+    <!-- 위치 추가 모달 -->
+    <div id="location-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="modal-title">위치 정보 추가</span>
+                <span class="close" id="close-location-modal">&times;</span>
+            </div>
+            <form id="location-form">
+                <div class="form-group">
+                    <label for="location-name">위치명</label>
+                    <input type="text" id="location-name" name="location-name" placeholder="위치명을 입력하세요" required>
+                </div>
+                <div class="form-group">
+                    <label for="location-description">설명</label>
+                    <textarea id="location-description" name="location-description" placeholder="위치에 대한 설명을 입력하세요"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="location-category">카테고리</label>
+                    <input type="text" id="location-category" name="location-category" placeholder="카테고리를 입력하세요 (예: 건물, 시설물, 관심지점)">
+                </div>
+                <div class="form-group">
+                    <label for="location-tags">태그</label>
+                    <input type="text" id="location-tags" name="location-tags" placeholder="태그를 쉼표로 구분하여 입력하세요 (예: 건설중, 중요, 점검필요)">
+                    <div id="tags-preview" style="margin-top: 8px; min-height: 20px;"></div>
+                </div>
+                <div style="text-align: right; margin-top: 20px;">
+                    <button type="button" class="btn btn-secondary" id="cancel-location">취소</button>
+                    <button type="submit" class="btn">저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 발파 정보 모달 -->
+    <div id="blasting-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="modal-title">발파 정보 입력</span>
+                <span class="close" id="close-blasting-modal">&times;</span>
+            </div>
+            <form id="blasting-form">
+                <div class="form-group">
+                    <label for="blasting-id">발파 ID</label>
+                    <input type="text" id="blasting-id" name="blasting-id" placeholder="발파 작업 ID를 입력하세요" required>
+                </div>
+                <div class="form-group">
+                    <label>Station 계산 방식</label>
+                    <div style="background: #e7f3ff; padding: 8px; border-radius: 4px; border-left: 3px solid #007bff; font-size: 12px; color: #0056b3;">
+                        ✅ 기준점 데이터를 사용하여 자동 계산됩니다.<br>
+                        📍 지도에서 클릭하면 정확한 STA 값이 자동으로 표시됩니다.
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="blasting-sta">발파위치(Sta.)</label>
+                    <input type="text" id="blasting-sta" name="blasting-sta" placeholder="자동 계산됨" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="blasting-coordinates">발파좌표(X,Y) - EPSG:5186</label>
+                    <input type="text" id="blasting-coordinates" name="blasting-coordinates" placeholder="자동 계산됨" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="blasting-depth">깊이(m)</label>
+                    <input type="number" id="blasting-depth" name="blasting-depth" placeholder="발파 깊이를 입력하세요" step="0.1" min="0" required>
+                </div>
+                <div class="form-group">
+                    <label for="blasting-description">설명</label>
+                    <textarea id="blasting-description" name="blasting-description" placeholder="발파 작업에 대한 설명을 입력하세요"></textarea>
+                </div>
+                <div style="text-align: right; margin-top: 20px;">
+                    <button type="button" class="btn btn-secondary" id="cancel-blasting">취소</button>
+                    <button type="submit" class="btn">저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 계측 정보 모달 -->
+    <div id="measurement-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="modal-title">계측 정보 입력</span>
+                <span class="close" id="close-measurement-modal">&times;</span>
+            </div>
+            <form id="measurement-form">
+                <div class="form-group">
+                    <label for="measurement-sta">계측위치(Sta.)</label>
+                    <input type="text" id="measurement-sta" name="measurement-sta" placeholder="자동 계산됨" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="measurement-coordinates">계측좌표(X,Y) - EPSG:5186</label>
+                    <input type="text" id="measurement-coordinates" name="measurement-coordinates" placeholder="자동 계산됨" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="measurement-description">설명</label>
+                    <textarea id="measurement-description" name="measurement-description" placeholder="계측 작업에 대한 설명을 입력하세요"></textarea>
+                </div>
+                <div style="text-align: right; margin-top: 20px;">
+                    <button type="button" class="btn btn-secondary" id="cancel-measurement">취소</button>
+                    <button type="submit" class="btn">저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+ 
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/proj4@2.11.0/dist/proj4.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+    <!-- DXF 파서 라이브러리들 -->
+    <script src="https://unpkg.com/dxf@4.7.0/dist/dxf.js"></script>
+    <!-- 백업용 기존 파서 -->
+    <script src="https://unpkg.com/dxf-parser@1.1.2/dist/dxf-parser.js"></script>
+
+    <script>
+        // --- 1. 설정 및 초기화 ---
+        const VWORLD_API_KEY = "5B2CF3E9-3FA1-3D3D-8B82-B65B360AFAAE";
+        const VWORLD_SATELLITE_URL = `https://api.vworld.kr/req/wmts/1.0.0/${VWORLD_API_KEY}/Satellite/{z}/{y}/{x}.jpeg`;
+        
+        // 고해상도 타일 서비스들
+        const GOOGLE_SATELLITE_URL = 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}';
+        const ESRI_SATELLITE_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+        const BING_SATELLITE_URL = 'https://ecn.t3.tiles.virtualearth.net/tiles/a{q}.jpeg?g=1';
+
+        proj4.defs("EPSG:5186", "+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=600000 +ellps=GRS80 +units=m +no_defs");
+        proj4.defs("EPSG:5179", "+proj=tmerc +lat_0=38 +lon_0=127.5 +k=1 +x_0=200000 +y_0=600000 +ellps=GRS80 +units=m +no_defs");
+
+        const map = L.map('map', { center: [36.5, 127.5], zoom: 7, maxZoom: 25 });
+        
+        // 기본 V-World 위성 이미지 (줌 0-19)
+        const vworldLayer = L.tileLayer(VWORLD_SATELLITE_URL, { 
+            attribution: 'V-World',
+            maxZoom: 19,
+            minZoom: 0
+        });
+        
+        // 고해상도 Google 위성 이미지 (줌 19-25)
+        const googleLayer = L.tileLayer(GOOGLE_SATELLITE_URL, {
+            attribution: 'Google Satellite',
+            maxZoom: 25,
+            minZoom: 19
+        });
+        
+        // ESRI 고해상도 위성 이미지 (줌 19-25, 백업용)
+        const esriLayer = L.tileLayer(ESRI_SATELLITE_URL, {
+            attribution: 'ESRI World Imagery',
+            maxZoom: 25,
+            minZoom: 19
+        });
+        
+        // 초기 레이어 추가
+        vworldLayer.addTo(map);
+        
+        // 줌 레벨에 따른 레이어 자동 전환 (개선된 버전)
+        let currentBaseLayer = vworldLayer;
+        
+        map.on('zoomend', function() {
+            const currentZoom = map.getZoom();
+            let targetLayer;
+            
+            if (currentZoom >= 19) {
+                targetLayer = googleLayer;
+            } else {
+                targetLayer = vworldLayer;
+            }
+            
+            // 현재 베이스 레이어와 다른 경우에만 전환
+            if (targetLayer !== currentBaseLayer) {
+                // 기존 베이스 레이어 제거
+                if (map.hasLayer(currentBaseLayer)) {
+                    map.removeLayer(currentBaseLayer);
+                }
+                
+                // 새로운 베이스 레이어 추가
+                targetLayer.addTo(map);
+                currentBaseLayer = targetLayer;
+                
+                // DXF 레이어를 베이스 레이어 위에 다시 추가
+                addDXFLayerToMap();
+                
+                console.log(`줌 레벨 ${currentZoom}: ${targetLayer === googleLayer ? 'Google' : 'V-World'} 레이어로 전환`);
+            }
+        });
+ 
+        const dxfLayerGroup = L.layerGroup().addTo(map);
+        const layerGroups = new Map(); // 레이어별 그룹 관리를 위한 Map
+        
+        // 레이어 그룹을 베이스 레이어 위에 추가하기 위한 함수
+        function addDXFLayerToMap() {
+            if (map.hasLayer(dxfLayerGroup)) {
+                map.removeLayer(dxfLayerGroup);
+            }
+            map.addLayer(dxfLayerGroup);
+        }
+        
+        // 도구 관련 변수들
+        let isAddingLocation = false;
+        let isMeasuringDistance = false;
+        let isAddingBlasting = false;
+        let isAddingMeasurement = false;
+        let locationMarkers = [];
+        let distanceMarkers = [];
+        let distancePolylines = [];
+        let currentDistancePoints = [];
+        
+        // 발파 관련 변수들
+        let blastingMarkers = [];
+        let measurementMarkers = [];
+        let routeData = null; // GeoJSON 노선 데이터
+        let routeLayer = null; // 노선 레이어
+        
+
+        
+        // 기준점 데이터 (QGIS에서 생성된 정확한 좌표-STA 쌍)
+        const referencePoints = [
+            { x: 191210.1879, y: 545380.3588, sta: 27135.5 },    // 27km135.5
+            { x: 191786.3363, y: 544295.5358, sta: 25906.904 },  // 25km906.904
+            { x: 191848.1417, y: 544171.445, sta: 25798.249 },   // 25km798.249
+            { x: 191876.4512, y: 544101.7818, sta: 25693.038 },  // 25km693.038
+            { x: 191942.2975, y: 543890.4457, sta: 25471.646 },  // 25km471.646
+            { x: 191969.7389, y: 543767.1543, sta: 25345.090 },  // 25km345.090
+            { x: 191970.5232, y: 543731.0956, sta: 25309.000 },  // 25km309
+            { x: 191964.6604, y: 543682.5013, sta: 25260.000 },  // 25km260
+            { x: 191959.9417, y: 543662.8322, sta: 25240.000 },  // 25km240
+            { x: 191949.0639, y: 543630.6385, sta: 25205.769 },  // 25km205.769
+            { x: 191929.2976, y: 543589.3926, sta: 25160.000 },  // 25km160
+            { x: 191886.7836, y: 543521.6553, sta: 25080.000 },  // 25km080
+            { x: 191842.3080, y: 543455.1577, sta: 25000.000 }   // 25km000
+        ];
+        
+        // 기본 노선 데이터 로드 (테스트용)
+        fetch('./route.geojson')
+            .then(response => response.json())
+            .then(data => {
+                // 좌표계 변환을 위한 함수
+                function transformCoordinates(feature) {
+                    if (feature.geometry && feature.geometry.coordinates) {
+                        if (feature.geometry.type === 'LineString') {
+                            feature.geometry.coordinates = feature.geometry.coordinates.map(coord => {
+                                // EPSG:5186 → WGS84 변환
+                                const [lng, lat] = proj4('EPSG:5186', 'EPSG:4326', coord);
+                                return [lng, lat];
+                            });
+                        } else if (feature.geometry.type === 'Point') {
+                            const coord = feature.geometry.coordinates;
+                            const [lng, lat] = proj4('EPSG:5186', 'EPSG:4326', coord);
+                            feature.geometry.coordinates = [lng, lat];
+                        }
+                    }
+                    return feature;
+                }
+                
+                // 모든 피처에 대해 좌표계 변환 적용
+                const transformedData = {
+                    ...data,
+                    features: data.features.map(transformCoordinates)
+                };
+                
+                routeData = transformedData;
+                console.log('기본 노선 데이터 로드됨 (좌표계 변환 완료):', transformedData);
+                
+                // 변환된 데이터로 노선 레이어 생성
+                routeLayer = L.geoJSON(transformedData, {
+                    style: {
+                        color: '#ff6b35',
+                        weight: 3,
+                        opacity: 0.8
+                    }
+                }).addTo(map);
+                
+                // 노선에 맞춰 지도 뷰 조정
+                if (transformedData.features && transformedData.features.length > 0) {
+                    map.fitBounds(routeLayer.getBounds(), { padding: [50, 50] });
+                }
+                
+            })
+            .catch(error => {
+                console.log('기본 노선 데이터 로드 실패, 파일 업로드 필요:', error);
+            });
+        
+        // 도구 버튼 이벤트 리스너
+        document.getElementById('add-location-btn').addEventListener('click', function() {
+            toggleLocationMode();
+        });
+        
+        document.getElementById('measure-distance-btn').addEventListener('click', function() {
+            toggleDistanceMode();
+        });
+        
+        document.getElementById('add-blasting-btn').addEventListener('click', function() {
+            toggleBlastingMode();
+        });
+        
+        document.getElementById('add-measurement-btn').addEventListener('click', function() {
+            toggleMeasurementMode();
+        });
+        
+        document.getElementById('clear-all-btn').addEventListener('click', function() {
+            if (confirm('모든 위치 마커와 거리 측정을 삭제하시겠습니까?')) {
+                clearAllMarkers();
+            }
+        });
+        
+        // 모달 관련 이벤트 리스너
+        document.getElementById('close-location-modal').addEventListener('click', function() {
+            closeLocationModal();
+        });
+        
+        document.getElementById('cancel-location').addEventListener('click', function() {
+            closeLocationModal();
+        });
+        
+        // 발파 모달 이벤트 리스너
+        document.getElementById('close-blasting-modal').addEventListener('click', function() {
+            closeBlastingModal();
+        });
+        
+        document.getElementById('cancel-blasting').addEventListener('click', function() {
+            closeBlastingModal();
+        });
+        
+        // 계측 모달 이벤트 리스너
+        document.getElementById('close-measurement-modal').addEventListener('click', function() {
+            closeMeasurementModal();
+        });
+        
+        document.getElementById('cancel-measurement').addEventListener('click', function() {
+            closeMeasurementModal();
+        });
+        
+
+        
+        // 태그 입력 시 실시간 미리보기
+        document.getElementById('location-tags').addEventListener('input', function() {
+            updateTagsPreview();
+        });
+        
+        // 태그 미리보기 업데이트
+        function updateTagsPreview() {
+            const tagsInput = document.getElementById('location-tags');
+            const tagsPreview = document.getElementById('tags-preview');
+            const tags = tagsInput.value.split(',').map(tag => tag.trim()).filter(tag => tag);
+            
+            if (tags.length > 0) {
+                const tagsHTML = tags.map(tag => 
+                    `<span class="tag-preview" style="display: inline-block; background: #007bff; color: white; padding: 2px 8px; margin: 2px; border-radius: 12px; font-size: 11px;">${tag}</span>`
+                ).join('');
+                tagsPreview.innerHTML = tagsHTML;
+            } else {
+                tagsPreview.innerHTML = '';
+            }
+        }
+        
+        // 위치 추가 모드 토글
+        function toggleLocationMode() {
+            if (isAddingLocation) {
+                isAddingLocation = false;
+                document.getElementById('add-location-btn').classList.remove('active');
+                map.getContainer().style.cursor = '';
+            } else {
+                // 다른 모드 비활성화
+                isMeasuringDistance = false;
+                document.getElementById('measure-distance-btn').classList.remove('active');
+                
+                // 위치 추가 모드 활성화
+                isAddingLocation = true;
+                document.getElementById('add-location-btn').classList.add('active');
+                map.getContainer().style.cursor = 'crosshair';
+            }
+        }
+        
+        // 발파 모드 토글
+        function toggleBlastingMode() {
+            if (isAddingBlasting) {
+                isAddingBlasting = false;
+                document.getElementById('add-blasting-btn').classList.remove('active');
+                map.getContainer().style.cursor = '';
+            } else {
+                // 다른 모드 비활성화
+                isAddingLocation = false;
+                isMeasuringDistance = false;
+                isAddingMeasurement = false;
+                document.getElementById('add-location-btn').classList.remove('active');
+                document.getElementById('measure-distance-btn').classList.remove('active');
+                document.getElementById('add-measurement-btn').classList.remove('active');
+                
+                // 발파 모드 활성화
+                isAddingBlasting = true;
+                document.getElementById('add-blasting-btn').classList.add('active');
+                map.getContainer().style.cursor = 'crosshair';
+            }
+        }
+        
+        // 계측 모드 토글
+        function toggleMeasurementMode() {
+            if (isAddingMeasurement) {
+                isAddingMeasurement = false;
+                document.getElementById('add-measurement-btn').classList.remove('active');
+                map.getContainer().style.cursor = '';
+            } else {
+                // 다른 모드 비활성화
+                isAddingLocation = false;
+                isMeasuringDistance = false;
+                isAddingBlasting = false;
+                document.getElementById('add-location-btn').classList.remove('active');
+                document.getElementById('measure-distance-btn').classList.remove('active');
+                document.getElementById('add-blasting-btn').classList.remove('active');
+                
+                // 계측 모드 활성화
+                isAddingMeasurement = true;
+                document.getElementById('add-measurement-btn').classList.add('active');
+                map.getContainer().style.cursor = 'crosshair';
+            }
+        }
+        
+        // 거리 계산 모드 토글
+        function toggleDistanceMode() {
+            if (isMeasuringDistance) {
+                isMeasuringDistance = false;
+                document.getElementById('measure-distance-btn').classList.remove('active');
+                map.getContainer().style.cursor = '';
+                finishDistanceMeasurement();
+            } else {
+                // 다른 모드 비활성화
+                isAddingLocation = false;
+                isAddingBlasting = false;
+                isAddingMeasurement = false;
+                document.getElementById('add-location-btn').classList.remove('active');
+                document.getElementById('add-blasting-btn').classList.remove('active');
+                document.getElementById('add-measurement-btn').classList.remove('active');
+                
+                // 거리 계산 모드 활성화
+                isMeasuringDistance = true;
+                document.getElementById('measure-distance-btn').classList.add('active');
+                map.getContainer().style.cursor = 'crosshair';
+                startDistanceMeasurement();
+            }
+        }
+        
+        // 거리 계산 시작
+        function startDistanceMeasurement() {
+            currentDistancePoints = [];
+            map.on('click', onMapClickForDistance);
+        }
+        
+        // 거리 계산을 위한 지도 클릭 이벤트
+        function onMapClickForDistance(e) {
+            if (!isMeasuringDistance) return;
+            
+            const latlng = e.latlng;
+            currentDistancePoints.push(latlng);
+            
+            // 마커 추가
+            const marker = L.marker(latlng, {
+                icon: L.divIcon({
+                    className: 'distance-marker',
+                    html: `<div style="background: #007bff; color: white; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold;">${currentDistancePoints.length}</div>`,
+                    iconSize: [20, 20]
+                })
+            }).addTo(map);
+            
+            distanceMarkers.push(marker);
+            
+            // 선 그리기
+            if (currentDistancePoints.length > 1) {
+                const polyline = L.polyline([currentDistancePoints[currentDistancePoints.length - 2], latlng], {
+                    color: '#007bff',
+                    weight: 3,
+                    opacity: 0.8
+                }).addTo(map);
+                
+                distancePolylines.push(polyline);
+                
+                // 거리 표시
+                const distance = calculateDistance(currentDistancePoints[currentDistancePoints.length - 2], latlng);
+                L.tooltip({
+                    permanent: true,
+                    direction: 'center'
+                })
+                .setContent(`${distance.toFixed(2)}m`)
+                .setLatLng([(currentDistancePoints[currentDistancePoints.length - 2].lat + latlng.lat) / 2, (currentDistancePoints[currentDistancePoints.length - 2].lng + latlng.lng) / 2])
+                .addTo(map);
+            }
+        }
+        
+        // 거리 계산 완료
+        function finishDistanceMeasurement() {
+            map.off('click', onMapClickForDistance);
+            
+            if (currentDistancePoints.length > 1) {
+                const totalDistance = calculateTotalDistance();
+                alert(`총 거리: ${totalDistance.toFixed(2)}m`);
+            }
+        }
+        
+        // 두 점 사이의 거리 계산 (미터)
+        function calculateDistance(point1, point2) {
+            return L.latLng(point1.lat, point1.lng).distanceTo(L.latLng(point2.lat, point2.lng));
+        }
+        
+        // 총 거리 계산
+        function calculateTotalDistance() {
+            let total = 0;
+            for (let i = 1; i < currentDistancePoints.length; i++) {
+                total += calculateDistance(currentDistancePoints[i-1], currentDistancePoints[i]);
+            }
+            return total;
+        }
+        
+        // 위치 추가를 위한 지도 클릭 이벤트
+        map.on('click', function(e) {
+            // 마지막 클릭 위치 저장 (Station 시작점 변경 시 STA. 재계산용)
+            window.lastClickedLatLng = e.latlng;
+            
+            if (isAddingLocation) {
+                showLocationModal(e.latlng);
+            } else if (isAddingBlasting) {
+                showBlastingModal(e.latlng);
+            } else if (isAddingMeasurement) {
+                showMeasurementModal(e.latlng);
+            }
+        });
+        
+        // 위치 추가 모달 표시
+        function showLocationModal(latlng) {
+            document.getElementById('location-modal').style.display = 'block';
+            
+            // 폼 제출 이벤트
+            document.getElementById('location-form').onsubmit = function(e) {
+                e.preventDefault();
+                addLocationMarker(latlng);
+                closeLocationModal();
+            };
+        }
+        
+        // 발파 모달 표시
+        function showBlastingModal(latlng) {
+            // WGS84 좌표를 EPSG:5186으로 변환
+            const [x, y] = proj4('EPSG:4326', 'EPSG:5186', [latlng.lng, latlng.lat]);
+            const coordinates = `X: ${x.toFixed(3)}, Y: ${y.toFixed(3)}`;
+            
+            // 기준점 데이터를 사용하여 STA 값 자동 계산
+            const sta = calculateSTA(latlng);
+            
+            document.getElementById('blasting-coordinates').value = coordinates;
+            document.getElementById('blasting-sta').value = sta;
+            
+            document.getElementById('blasting-modal').style.display = 'block';
+            
+            // 폼 제출 이벤트
+            document.getElementById('blasting-form').onsubmit = function(e) {
+                e.preventDefault();
+                addBlastingMarker(latlng);
+                closeBlastingModal();
+            };
+        }
+        
+        // 계측 모달 표시
+        function showMeasurementModal(latlng) {
+            // WGS84 좌표를 EPSG:5186으로 변환
+            const [x, y] = proj4('EPSG:4326', 'EPSG:5186', [latlng.lng, latlng.lat]);
+            const coordinates = `X: ${x.toFixed(3)}, Y: ${y.toFixed(3)}`;
+            
+            // 기준점 데이터를 사용하여 STA 값 자동 계산
+            const sta = calculateSTA(latlng);
+            
+            document.getElementById('measurement-coordinates').value = coordinates;
+            document.getElementById('measurement-sta').value = sta;
+            
+            document.getElementById('measurement-modal').style.display = 'block';
+            
+            // 폼 제출 이벤트
+            document.getElementById('measurement-form').onsubmit = function(e) {
+                e.preventDefault();
+                addMeasurementMarker(latlng);
+                closeMeasurementModal();
+            };
+        }
+        
+        // 위치 추가 모달 닫기
+        function closeLocationModal() {
+            document.getElementById('location-modal').style.display = 'none';
+            document.getElementById('location-form').reset();
+        }
+        
+        // 발파 모달 닫기
+        function closeBlastingModal() {
+            document.getElementById('blasting-modal').style.display = 'none';
+            document.getElementById('blasting-form').reset();
+        }
+        
+        // 계측 모달 닫기
+        function closeMeasurementModal() {
+            document.getElementById('measurement-modal').style.display = 'none';
+            document.getElementById('measurement-form').reset();
+        }
+        
+
+        
+
+        
+
+        
+        // 위치 마커 추가
+        function addLocationMarker(latlng) {
+            const name = document.getElementById('location-name').value;
+            const description = document.getElementById('location-description').value;
+            const category = document.getElementById('location-category').value;
+            const tags = document.getElementById('location-tags').value.split(',').map(tag => tag.trim()).filter(tag => tag);
+            
+            // 위치 마커 생성
+            const markerIcon = L.divIcon({
+                className: 'location-marker',
+                html: `<div style="background: #28a745; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold;">📍</div>`,
+                iconSize: [24, 24]
+            });
+            
+            const marker = L.marker(latlng, {
+                icon: markerIcon
+            }).addTo(map);
+            
+            // 태그가 있는 경우 지도에 직접 텍스트 라벨 추가
+            if (tags.length > 0) {
+                const tagLabel = L.divIcon({
+                    className: 'tag-label',
+                    html: `
+                        <div style="background: white; color: #333; padding: 6px 10px; border-radius: 6px; font-size: 13px; font-weight: bold; white-space: nowrap; box-shadow: 0 3px 8px rgba(0,0,0,0.3); border: 2px solid #6f42c1; text-align: center; min-width: 60px;">
+                            ${tags[0]}
+                        </div>
+                    `,
+                    iconSize: [0, 0],
+                    iconAnchor: [0, 0]
+                });
+                
+                const tagMarker = L.marker(latlng, {
+                    icon: tagLabel,
+                    interactive: false
+                }).addTo(map);
+                
+                // 태그 라벨을 마커 오른쪽에 배치
+                tagMarker.setLatLng([
+                    latlng.lat,
+                    latlng.lng + 0.00015 // 마커 오른쪽에 적절한 오프셋
+                ]);
+                
+                // 태그 마커를 위치 마커와 함께 관리
+                locationMarkers.push({ marker: marker, tagMarker: tagMarker });
+            } else {
+                locationMarkers.push({ marker: marker, tagMarker: null });
+            }
+            
+            // 팝업 정보 추가
+            const popupContent = `
+                <div style="min-width: 200px;">
+                    <h4 style="margin: 0 0 10px 0; color: #007bff;">${name}</h4>
+                    ${category ? `<p style="margin: 5px 0; color: #666;"><strong>카테고리:</strong> ${category}</p>` : ''}
+                    ${description ? `<p style="margin: 5px 0; color: #333;">${description}</p>` : ''}
+                    ${tags.length > 0 ? `
+                        <div style="margin: 10px 0;">
+                            <p style="margin: 5px 0; color: #666;"><strong>태그:</strong></p>
+                            <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+                                ${tags.map(tag => `<span style="background: #ff6b35; color: white; padding: 3px 8px; border-radius: 12px; font-size: 11px;">${tag}</span>`).join('')}</div>
+                        </div>
+                    ` : ''}
+                    <p style="margin: 5px 0; font-size: 12px; color: #999;">
+                        좌표: ${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}
+                    </p>
+                    <button onclick="removeLocationMarker(this)" style="background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 12px;">삭제</button>
+                </div>
+            `;
+            
+            marker.bindPopup(popupContent);
+            
+            // 위치 추가 모드 비활성화
+            isAddingLocation = false;
+            document.getElementById('add-location-btn').classList.remove('active');
+            map.getContainer().style.cursor = '';
+            
+            // 위치 정보 업데이트
+            updateLocationInfo();
+        }
+        
+        // 발파 마커 추가
+        function addBlastingMarker(latlng) {
+            const blastingId = document.getElementById('blasting-id').value;
+            const blastingSta = document.getElementById('blasting-sta').value;
+            const blastingCoordinates = document.getElementById('blasting-coordinates').value;
+            const blastingDepth = parseFloat(document.getElementById('blasting-depth').value);
+            const blastingDescription = document.getElementById('blasting-description').value;
+            
+            // WGS84 좌표를 EPSG:5186으로 변환하여 저장
+            const [x, y] = proj4('EPSG:4326', 'EPSG:5186', [latlng.lng, latlng.lat]);
+            const epsg5186Coordinates = `X: ${x.toFixed(3)}, Y: ${y.toFixed(3)}`;
+            
+            // 발파 마커 생성 (빨간색)
+            const markerIcon = L.divIcon({
+                className: 'blasting-marker',
+                html: `<div style="background: #dc3545; color: white; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: bold;">💥</div>`,
+                iconSize: [28, 28]
+            });
+            
+            const marker = L.marker(latlng, {
+                icon: markerIcon
+            }).addTo(map);
+            
+            // 발파 정보를 마커에 저장
+            marker.blastingData = {
+                id: blastingId,
+                sta: blastingSta,
+                coordinates: epsg5186Coordinates, // EPSG:5186 좌표로 저장
+                depth: blastingDepth,
+                description: blastingDescription,
+                latlng: latlng,
+                epsg5186: { x: x, y: y } // EPSG:5186 좌표값도 별도로 저장
+            };
+            
+
+            
+            // 팝업 정보 추가
+            const popupContent = `
+                <div style="min-width: 250px;">
+                    <h4 style="margin: 0 0 10px 0; color: #dc3545;">💥 발파 위치</h4>
+                    <p style="margin: 5px 0; color: #333;"><strong>발파 ID:</strong> ${blastingId}</p>
+                    <p style="margin: 5px 0; color: #333;"><strong>STA.:</strong> ${blastingSta}</p>
+                    <p style="margin: 5px 0; color: #333;"><strong>좌표:</strong> ${blastingCoordinates}</p>
+                    <p style="margin: 5px 0; color: #333;"><strong>깊이:</strong> ${blastingDepth}m</p>
+                    ${blastingDescription ? `<p style="margin: 5px 0; color: #333;"><strong>설명:</strong> ${blastingDescription}</p>` : ''}
+                    <button onclick="removeBlastingMarker(this)" style="background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 12px;">삭제</button>
+                </div>
+            `;
+            
+            marker.bindPopup(popupContent);
+            
+            // 발파 마커 배열에 추가
+            blastingMarkers.push(marker);
+            
+            // 발파 추가 모드 비활성화
+            isAddingBlasting = false;
+            document.getElementById('add-blasting-btn').classList.remove('active');
+            map.getContainer().style.cursor = '';
+            
+            // 발파 정보 업데이트
+            updateBlastingInfo();
+        }
+        
+        // 계측 마커 추가
+        function addMeasurementMarker(latlng) {
+            const measurementSta = document.getElementById('measurement-sta').value;
+            const measurementCoordinates = document.getElementById('measurement-coordinates').value;
+            const measurementDescription = document.getElementById('measurement-description').value;
+            
+            // WGS84 좌표를 EPSG:5186으로 변환하여 저장
+            const [x, y] = proj4('EPSG:4326', 'EPSG:5186', [latlng.lng, latlng.lat]);
+            const epsg5186Coordinates = `X: ${x.toFixed(3)}, Y: ${y.toFixed(3)}`;
+            
+            // 계측 마커 생성 (파란색)
+            const markerIcon = L.divIcon({
+                className: 'measurement-marker',
+                html: `<div style="background: #007bff; color: white; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: bold;">📊</div>`,
+                iconSize: [28, 28]
+            });
+            
+            const marker = L.marker(latlng, {
+                icon: markerIcon
+            }).addTo(map);
+            
+            // 계측 정보를 마커에 저장
+            marker.measurementData = {
+                sta: measurementSta,
+                coordinates: epsg5186Coordinates, // EPSG:5186 좌표로 저장
+                description: measurementDescription,
+                latlng: latlng,
+                epsg5186: { x: x, y: y } // EPSG:5186 좌표값도 별도로 저장
+            };
+            
+
+            
+            // 팝업 정보 추가
+            const popupContent = `
+                <div style="min-width: 250px;">
+                    <h4 style="margin: 0 0 10px 0; color: #007bff;">📊 계측 위치</h4>
+                    <p style="margin: 5px 0; color: #333;"><strong>STA.:</strong> ${measurementSta}</p>
+                    <p style="margin: 5px 0; color: #333;"><strong>좌표:</strong> ${measurementCoordinates}</p>
+                    ${measurementDescription ? `<p style="margin: 5px 0; color: #333;"><strong>설명:</strong> ${measurementDescription}</p>` : ''}
+                    <button onclick="removeMeasurementMarker(this)" style="background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 12px;">삭제</button>
+                </div>
+            `;
+            
+            marker.bindPopup(popupContent);
+            
+            // 계측 마커 배열에 추가
+            measurementMarkers.push(marker);
+            
+            // 계측 추가 모드 비활성화
+            isAddingMeasurement = false;
+            document.getElementById('add-measurement-btn').classList.remove('active');
+            map.getContainer().style.cursor = '';
+            
+            // 발파 정보 업데이트 (거리 계산 포함)
+            updateBlastingInfo();
+        }
+        
+        // 위치 마커 삭제 (전역 함수로 등록)
+        window.removeLocationMarker = function(button) {
+            const marker = button.closest('.leaflet-popup-content').__marker;
+            if (marker) {
+                // 위치 마커와 태그 마커 모두 찾아서 삭제
+                const locationData = locationMarkers.find(item => item.marker === marker);
+                if (locationData) {
+                    map.removeLayer(locationData.marker);
+                    if (locationData.tagMarker) {
+                        map.removeLayer(locationData.tagMarker);
+                    }
+                    
+                    const index = locationMarkers.indexOf(locationData);
+                    if (index > -1) {
+                        locationMarkers.splice(index, 1);
+                    }
+                    
+                    // 위치 정보 업데이트
+                    updateLocationInfo();
+                }
+            }
+        };
+        
+        // 발파 마커 삭제 (전역 함수로 등록)
+        window.removeBlastingMarker = function(button) {
+            const marker = button.closest('.leaflet-popup-content').__marker;
+            if (marker) {
+                map.removeLayer(marker);
+                
+                const index = blastingMarkers.indexOf(marker);
+                if (index > -1) {
+                    blastingMarkers.splice(index, 1);
+                }
+                
+                // 발파 정보 업데이트
+                updateBlastingInfo();
+            }
+        };
+        
+        // 계측 마커 삭제 (전역 함수로 등록)
+        window.removeMeasurementMarker = function(button) {
+            const marker = button.closest('.leaflet-popup-content').__marker;
+            if (marker) {
+                map.removeLayer(marker);
+                
+                const index = measurementMarkers.indexOf(marker);
+                if (index > -1) {
+                    measurementMarkers.splice(index, 1);
+                }
+                
+                // 발파 정보 업데이트
+                updateBlastingInfo();
+            }
+        };
+        
+        // 전체 마커 삭제
+        function clearAllMarkers() {
+            // 위치 마커 삭제
+            locationMarkers.forEach(item => {
+                map.removeLayer(item.marker);
+                if (item.tagMarker) {
+                    map.removeLayer(item.tagMarker);
+                }
+            });
+            locationMarkers = [];
+            
+            // 발파 마커 삭제
+            blastingMarkers.forEach(marker => map.removeLayer(marker));
+            blastingMarkers = [];
+            
+            // 계측 마커 삭제
+            measurementMarkers.forEach(marker => map.removeLayer(marker));
+            measurementMarkers = [];
+            
+            // 거리 측정 마커 삭제
+            distanceMarkers.forEach(marker => map.removeLayer(marker));
+            distancePolylines.forEach(polyline => map.removeLayer(polyline));
+            distanceMarkers = [];
+            distancePolylines = [];
+            currentDistancePoints = [];
+            
+            // 정보 업데이트
+            updateLocationInfo();
+            updateBlastingInfo();
+            
+            // 모드 비활성화
+            isAddingLocation = false;
+            isMeasuringDistance = false;
+            isAddingBlasting = false;
+            isAddingMeasurement = false;
+            document.getElementById('add-location-btn').classList.remove('active');
+            document.getElementById('measure-distance-btn').classList.remove('active');
+            document.getElementById('add-blasting-btn').classList.remove('active');
+            document.getElementById('add-measurement-btn').classList.remove('active');
+            map.getContainer().style.cursor = '';
+        }
+        
+        // 위치 정보 업데이트
+        function updateLocationInfo() {
+            const locationInfo = document.getElementById('location-info');
+            if (locationMarkers.length === 0) {
+                locationInfo.innerHTML = '<div style="color: #666; font-size: 11px; text-align: center; padding: 10px;">지도에서 위치를 추가하면 여기에 표시됩니다.</div>';
+            } else {
+                let infoHTML = '<div style="max-height: 200px; overflow-y: auto;">';
+                locationMarkers.forEach((item, index) => {
+                    const latlng = item.marker.getLatLng();
+                    infoHTML += `
+                        <div style="padding: 8px; margin: 5px 0; background: #f8f9fa; border-radius: 4px; border-left: 3px solid #28a745;">
+                            <div style="font-weight: bold; color: #333;">위치 ${index + 1}</div>
+                            <div style="font-size: 11px; color: #666;">좌표: ${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}</div>
+                        </div>
+                    `;
+                });
+                infoHTML += '</div>';
+                locationInfo.innerHTML = infoHTML;
+            }
+        }
+        
+        // 발파 정보 업데이트
+        function updateBlastingInfo() {
+            const blastingInfo = document.getElementById('blasting-info');
+            
+            if (blastingMarkers.length === 0 && measurementMarkers.length === 0) {
+                blastingInfo.innerHTML = '<div style="color: #666; font-size: 11px; text-align: center; padding: 10px;">발파 위치와 계측 위치를 추가하면 여기에 표시됩니다.</div>';
+                return;
+            }
+            
+            let infoHTML = '<div style="max-height: 300px; overflow-y: auto;">';
+            
+            // 발파 마커 정보
+            if (blastingMarkers.length > 0) {
+                infoHTML += '<h5 style="margin: 10px 0 5px 0; color: #dc3545;">💥 발파 위치</h5>';
+                blastingMarkers.forEach((marker, index) => {
+                    const data = marker.blastingData;
+                    infoHTML += `
+                        <div style="padding: 8px; margin: 5px 0; background: #fff5f5; border-radius: 4px; border-left: 3px solid #dc3545;">
+                            <div style="font-weight: bold; color: #333;">발파 ${index + 1}</div>
+                            <div style="font-size: 11px; color: #666;">ID: ${data.id}</div>
+                            <div style="font-size: 11px; color: #666;">STA.: ${data.sta}</div>
+                            <div style="font-size: 11px; color: #666;">깊이: ${data.depth}m</div>
+                        </div>
+                    `;
+                });
+            }
+            
+            // 계측 마커 정보
+            if (measurementMarkers.length > 0) {
+                infoHTML += '<h5 style="margin: 15px 0 5px 0; color: #007bff;">📊 계측 위치</h5>';
+                measurementMarkers.forEach((marker, index) => {
+                    const data = marker.measurementData;
+                    infoHTML += `
+                        <div style="padding: 8px; margin: 5px 0; background: #f0f8ff; border-radius: 4px; border-left: 3px solid #007bff;">
+                            <div style="font-weight: bold; color: #333;">계측 ${index + 1}</div>
+                            <div style="font-size: 11px; color: #666;">STA.: ${data.sta}</div>
+                        </div>
+                    `;
+                });
+            }
+            
+            // 거리 계산 결과
+            if (blastingMarkers.length > 0 && measurementMarkers.length > 0) {
+                infoHTML += '<h5 style="margin: 15px 0 5px 0; color: #28a745;">📏 거리 계산 결과</h5>';
+                
+                blastingMarkers.forEach((blastingMarker, bIndex) => {
+                    const blastingData = blastingMarker.blastingData;
+                    
+                    measurementMarkers.forEach((measurementMarker, mIndex) => {
+                        const measurementData = measurementMarker.measurementData;
+                        
+                        // Turf.js를 사용한 수평 거리 계산
+                        const horizontalDistance = turf.distance(
+                            turf.point([blastingData.latlng.lng, blastingData.latlng.lat]),
+                            turf.point([measurementData.latlng.lng, measurementData.latlng.lat]),
+                            { units: 'meters' }
+                        );
+                        
+                        // 3D 거리 계산 (피타고라스 정리)
+                        const verticalDistance = blastingData.depth;
+                        const threeDDistance = Math.sqrt(horizontalDistance * horizontalDistance + verticalDistance * verticalDistance);
+                        
+                        infoHTML += `
+                            <div style="padding: 8px; margin: 5px 0; background: #f8fff8; border-radius: 4px; border-left: 3px solid #28a745;">
+                                <div style="font-weight: bold; color: #333;">발파 ${bIndex + 1} ↔ 계측 ${mIndex + 1}</div>
+                                <div style="font-size: 11px; color: #666;">수평 거리: ${horizontalDistance.toFixed(2)}m</div>
+                                <div style="font-size: 11px; color: #666;">3D 거리: ${threeDDistance.toFixed(2)}m</div>
+                                <div style="font-size: 11px; color: #666;">깊이: ${verticalDistance}m</div>
+                            </div>
+                        `;
+                    });
+                });
+            }
+            
+            infoHTML += '</div>';
+            blastingInfo.innerHTML = infoHTML;
+        }
+        
+        // 팝업에 마커 참조 추가
+        map.on('popupopen', function(e) {
+            if (e.popup && e.popup.getContent) {
+                const content = e.popup.getContent();
+                if (content && content.includes('removeLocationMarker')) {
+                    e.popup.getElement().querySelector('.leaflet-popup-content').__marker = e.target;
+                } else if (content && content.includes('removeBlastingMarker')) {
+                    e.popup.getElement().querySelector('.leaflet-popup-content').__marker = e.target;
+                } else if (content && content.includes('removeMeasurementMarker')) {
+                    e.popup.getElement().querySelector('.leaflet-popup-content').__marker = e.target;
+                }
+            }
+        });
+
+        // --- 2. DXF 렌더링 로직 (대폭 개선) ---
+        // GeoJSON 파일 로드
+        const geojsonInput = document.getElementById('geojson-input');
+        geojsonInput.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const geojsonData = JSON.parse(e.target.result);
+                    routeData = geojsonData;
+                    
+                    // 기존 노선 레이어 제거
+                    if (routeLayer) {
+                        map.removeLayer(routeLayer);
+                    }
+                    
+                    // 좌표계 변환을 위한 함수
+                    function transformCoordinates(feature) {
+                        if (feature.geometry && feature.geometry.coordinates) {
+                            if (feature.geometry.type === 'LineString') {
+                                feature.geometry.coordinates = feature.geometry.coordinates.map(coord => {
+                                    // EPSG:5186 → WGS84 변환
+                                    const [lng, lat] = proj4('EPSG:5186', 'EPSG:4326', coord);
+                                    return [lng, lat];
+                                });
+                            } else if (feature.geometry.type === 'Point') {
+                                const coord = feature.geometry.coordinates;
+                                const [lng, lat] = proj4('EPSG:5186', 'EPSG:4326', coord);
+                                feature.geometry.coordinates = [lng, lat];
+                            }
+                        }
+                        return feature;
+                    }
+                    
+                    // 모든 피처에 대해 좌표계 변환 적용
+                    const transformedData = {
+                        ...geojsonData,
+                        features: geojsonData.features.map(transformCoordinates)
+                    };
+                    
+                    // 새로운 노선 레이어 추가 (변환된 좌표 사용)
+                    routeLayer = L.geoJSON(transformedData, {
+                        style: {
+                            color: '#ff6b35',
+                            weight: 3,
+                            opacity: 0.8
+                        }
+                    }).addTo(map);
+                    
+                    // 노선에 맞춰 지도 뷰 조정
+                    if (geojsonData.features && geojsonData.features.length > 0) {
+                        map.fitBounds(routeLayer.getBounds(), { padding: [50, 50] });
+                    }
+                    
+                    document.getElementById('geojson-status').textContent = '노선 데이터 로드 완료!';
+                    console.log('GeoJSON 노선 데이터 로드됨:', geojsonData);
+                    
+                } catch (error) {
+                    console.error('GeoJSON 파일 파싱 오류:', error);
+                    document.getElementById('geojson-status').textContent = '노선 파일 로드 실패.';
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        const dxfInput = document.getElementById('dxf-input');
+        dxfInput.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const statusEl = document.getElementById('status');
+                statusEl.textContent = '파일 처리 중...';
+                
+                // 기존 레이어 초기화
+                dxfLayerGroup.clearLayers();
+                layerGroups.clear();
+                document.getElementById('layer-control').innerHTML = '';
+
+                try {
+                    // 먼저 새로운 DXF 파서 시도
+                    let CadData;
+                    if (typeof DXF !== 'undefined' && DXF.Helper) {
+                        try {
+                            const helper = new DXF.Helper(e.target.result);
+                            CadData = helper.getCadData();
+                            console.log('새로운 DXF 파서로 성공:', CadData);
+                        } catch (newParserError) {
+                            console.log('새로운 파서 실패, 기존 파서 시도:', newParserError);
+                            throw newParserError; // 기존 파서로 넘어가기 위해 에러 발생
+                        }
+                    } else {
+                        throw new Error('DXF.Helper를 찾을 수 없습니다');
+                    }
+
+                    if (!CadData.entities || CadData.entities.length === 0) {
+                        statusEl.textContent = '도형 정보를 찾을 수 없습니다.';
+                        return;
+                    }
+
+                    // DXF 파일 구조 상세 분석 (새로운 파서)
+                    console.log('새로운 파서 - DXF 헤더 정보:', CadData.header);
+                    console.log('새로운 파서 - DXF 테이블 정보:', CadData.tables);
+                    console.log('새로운 파서 - DXF 블록 정보:', CadData.blocks);
+                    
+                    // 모든 레이어 정보 수집 (새로운 파서)
+                    const allLayers = new Set();
+                    CadData.entities.forEach(entity => {
+                        if (entity.layer) allLayers.add(entity.layer);
+                    });
+                    console.log('새로운 파서 - 발견된 모든 레이어:', Array.from(allLayers));
+
+                    // 좌표계 자동 감지
+                    const firstPoint = findFirstPoint(CadData.entities);
+                    const detectedEPSG = detectCoordinateSystem(firstPoint);
+                    statusEl.textContent = `좌표계 감지: EPSG:${detectedEPSG}. 도형 렌더링 중...`;
+
+                    // 각 도형(entity)을 지도에 그리기
+                    const allLatLngs = [];
+                    console.log('총 엔티티 수:', CadData.entities.length);
+                    
+                    for (const entity of CadData.entities) {
+                        console.log('엔티티 타입:', entity.type, '레이어:', entity.layer);
+                        
+                        const geometry = entityToLatLngs(entity, detectedEPSG);
+                        if (geometry.latlngs.length > 0) {
+                            const layerName = entity.layer || '0';
+                            const style = getStyleForEntity(entity, CadData.tables ? CadData.tables.layers : null);
+                            
+                            const layerGroup = getOrCreateLayerGroup(layerName, style.color);
+                            
+                            if(geometry.type === 'polyline') {
+                                L.polyline(geometry.latlngs, style).addTo(layerGroup);
+                            } else if(geometry.type === 'circle') {
+                                L.circle(geometry.latlngs[0], { ...style, radius: geometry.radius }).addTo(layerGroup);
+                            } else if(geometry.type === 'hatch') {
+                                // HATCH 엔티티를 폴리곤으로 렌더링
+                                L.polygon(geometry.latlngs, {
+                                    fillColor: '#FFFF00',
+                                    color: '#FFD700',
+                                    weight: 2,
+                                    opacity: 0.3,
+                                    fillOpacity: 0.1
+                                }).addTo(layerGroup);
+                            } else if(geometry.type === 'text') {
+                                // 텍스트 객체 렌더링
+                                const textContent = entity.text || entity.textString || 'TEXT';
+                                
+                                // 텍스트 위치에 직접 HTML 요소 추가
+                                const textDiv = L.divIcon({
+                                    className: 'text-marker',
+                                    html: `<div style="color: black; padding: 2px 6px; font-size: 12px; white-space: nowrap; box-shadow: 0 2px 4px rgba(0,0,0,0.3); font-weight: bold;">${textContent}</div>`,
+                                    iconSize: [0, 0],
+                                    iconAnchor: [0, 0]
+                                });
+                                
+                                const textMarker = L.marker(geometry.latlngs[0], {
+                                    icon: textDiv,
+                                    interactive: true
+                                }).addTo(layerGroup);
+                                
+                                // 텍스트 팝업 추가
+                                textMarker.bindPopup(`
+                                    <div style="min-width: 150px;">
+                                        <strong>텍스트:</strong> ${textContent}<br>
+                                        <strong>레이어:</strong> ${layerName}<br>
+                                        <strong>좌표:</strong> ${geometry.latlngs[0][0].toFixed(6)}, ${geometry.latlngs[0][1].toFixed(6)}
+                                    </div>
+                                `);
+                                
+                                console.log('새로운 파서 - 텍스트 렌더링 성공:', textContent, '레이어:', layerName, '좌표:', geometry.latlngs[0]);
+                            } else if(geometry.type === 'point') {
+                                // 점 객체 렌더링
+                                L.circleMarker(geometry.latlngs[0], {
+                                    radius: 3,
+                                    fillColor: '#ff0000',
+                                    color: '#000',
+                                    weight: 1,
+                                    opacity: 1,
+                                    fillOpacity: 0.8
+                                }).addTo(layerGroup);
+                            }
+                            allLatLngs.push(...geometry.latlngs);
+                        } else {
+                            console.log('변환 실패한 엔티티:', entity.type, entity);
+                        }
+                    }
+
+                    if (allLatLngs.length > 0) {
+                        map.fitBounds(L.latLngBounds(allLatLngs), { padding: [50, 50] });
+                        statusEl.textContent = `${CadData.entities.length}개 도형 로드 완료!`;
+                    } else {
+                        statusEl.textContent = '유효한 도형을 변환하지 못했습니다.';
+                    }
+
+                } catch (err) {
+                    console.log('새로운 파서 실패, 기존 파서로 시도:', err);
+                    
+                    // 기존 파서로 재시도
+                    try {
+                        const parser = new DxfParser();
+                        const dxf = parser.parseSync(e.target.result);
+                        console.log('기존 파서로 성공:', dxf);
+                        
+                        // DXF 파일 구조 상세 분석
+                        console.log('DXF 헤더 정보:', dxf.header);
+                        console.log('DXF 테이블 정보:', dxf.tables);
+                        console.log('DXF 블록 정보:', dxf.blocks);
+                        
+                        if (!dxf.entities || dxf.entities.length === 0) {
+                            statusEl.textContent = '도형 정보를 찾을 수 없습니다.';
+                            return;
+                        }
+                        
+                        // 모든 레이어 정보 수집
+                        const allLayers = new Set();
+                        dxf.entities.forEach(entity => {
+                            if (entity.layer) allLayers.add(entity.layer);
+                        });
+                        console.log('발견된 모든 레이어:', Array.from(allLayers));
+                        
+                        // 좌표계 자동 감지
+                        const firstPoint = findFirstPointLegacy(dxf.entities);
+                        const detectedEPSG = detectCoordinateSystem(firstPoint);
+                        statusEl.textContent = `좌표계 감지: EPSG:${detectedEPSG}. 도형 렌더링 중...`;
+
+                        // 각 도형을 지도에 그리기
+                        const allLatLngs = [];
+                        console.log('기존 파서 - 총 엔티티 수:', dxf.entities.length);
+                        
+                        for (const entity of dxf.entities) {
+                            console.log('기존 파서 - 엔티티 타입:', entity.type, '레이어:', entity.layer);
+                            
+                            const geometry = entityToLatLngsLegacy(entity, detectedEPSG);
+                            if (geometry.latlngs.length > 0) {
+                                const layerName = entity.layer || '0';
+                                const style = getStyleForEntityLegacy(entity);
+                                
+                                const layerGroup = getOrCreateLayerGroup(layerName, style.color);
+                                
+                                if(geometry.type === 'polyline') {
+                                    L.polyline(geometry.latlngs, style).addTo(layerGroup);
+                                } else if(geometry.type === 'circle') {
+                                    L.circle(geometry.latlngs[0], { ...style, radius: geometry.radius }).addTo(layerGroup);
+                                } else if(geometry.type === 'hatch') {
+                                    // HATCH 엔티티를 폴리곤으로 렌더링 (기존 파서용)
+                                    L.polygon(geometry.latlngs, {
+                                        fillColor: '#FFFF00',
+                                        color: '#FFD700',
+                                        weight: 2,
+                                        opacity: 0.3,
+                                        fillOpacity: 0.1
+                                    }).addTo(layerGroup);
+                                } else if(geometry.type === 'text') {
+                                // 텍스트 객체 렌더링 (기존 파서용)
+                                const textContent = entity.text || entity.textString || 'TEXT';
+                                
+                                // 텍스트 위치에 직접 HTML 요소 추가
+                                const textDiv = L.divIcon({
+                                    className: 'text-marker',
+                                    html: `<div style="color: black; padding: 2px 6px; font-size: 12px; white-space: nowrap; box-shadow: 0 2px 4px rgba(0,0,0,0.3); font-weight: bold;">${textContent}</div>`,
+                                    iconSize: [0, 0],
+                                    iconAnchor: [0, 0]
+                                });
+                                
+                                const textMarker = L.marker(geometry.latlngs[0], {
+                                    icon: textDiv,
+                                    interactive: true
+                                }).addTo(layerGroup);
+                                
+                                // 텍스트 팝업 추가
+                                textMarker.bindPopup(`
+                                    <div style="min-width: 150px;">
+                                        <strong>텍스트:</strong> ${textContent}<br>
+                                        <strong>레이어:</strong> ${layerName}<br>
+                                        <strong>좌표:</strong> ${geometry.latlngs[0][0].toFixed(6)}, ${geometry.latlngs[0][1].toFixed(6)}
+                                    </div>
+                                `);
+                                
+                                console.log('텍스트 렌더링 성공:', textContent, '레이어:', layerName, '좌표:', geometry.latlngs[0]);
+                            } else if(geometry.type === 'point') {
+                                    // 점 객체 렌더링 (기존 파서용)
+                                    L.circleMarker(geometry.latlngs[0], {
+                                        radius: 3,
+                                        fillColor: '#ff0000',
+                                        color: '#000',
+                                        weight: 1,
+                                        opacity: 1,
+                                        fillOpacity: 0.8
+                                    }).addTo(layerGroup);
+                                }
+                                allLatLngs.push(...geometry.latlngs);
+                            } else {
+                                console.log('기존 파서 - 변환 실패한 엔티티:', entity.type, entity);
+                            }
+                        }
+
+                        if (allLatLngs.length > 0) {
+                            map.fitBounds(L.latLngBounds(allLatLngs), { padding: [50, 50] });
+                            statusEl.textContent = `${dxf.entities.length}개 도형 로드 완료! (기존 파서)`;
+                        } else {
+                            statusEl.textContent = '유효한 도형을 변환하지 못했습니다.';
+                        }
+                        
+                    } catch (legacyError) {
+                        console.error('모든 DXF 파서 실패:', legacyError);
+                        statusEl.textContent = 'DXF 파일 처리 실패. 콘솔을 확인하세요.';
+                    }
+                }
+            };
+            reader.readAsText(file, 'UTF-8');
+        });
+
+        // --- 3. 헬퍼 함수들 ---
+ 
+         function findFirstPoint(entities) {
+             for(const entity of entities) {
+                 if(entity.vertices && entity.vertices.length > 0) return entity.vertices[0];
+                 if(entity.startPoint) return entity.startPoint;
+                 if(entity.center) return entity.center;
+             }
+             return null;
+         }
+         
+         // 기존 파서용 헬퍼 함수들
+         function findFirstPointLegacy(entities) {
+             for(const entity of entities) {
+                 if(entity.vertices && entity.vertices.length > 0) return entity.vertices[0];
+                 if(entity.startPoint) return entity.startPoint;
+                 if(entity.center) return entity.center;
+             }
+             return null;
+         }
+ 
+         function detectCoordinateSystem(point) {
+             if (!point) return "5186"; // 점이 없으면 기본값 반환
+             
+             console.log('좌표계 감지 - 입력 좌표:', point);
+             
+             // 더 많은 한국 좌표계 지원
+             const epsgCodes = ["5186", "5179", "5181", "5187", "5188", "5189", "5190", "5191", "5192", "5193", "5194", "5195", "5196", "5197", "5198", "5199"];
+             
+             for (const code of epsgCodes) {
+                 try {
+                     const [lon, lat] = proj4(`EPSG:${code}`, "EPSG:4326", [point.x, point.y]);
+                     console.log(`EPSG:${code} 변환 결과:`, lon, lat);
+                     
+                     // 한국 영역 내 좌표인지 확인 (더 넓은 범위)
+                     if (lat >= 30 && lat <= 45 && lon >= 120 && lon <= 140) {
+                         console.log(`좌표계 감지 성공: EPSG:${code}`);
+                         return code;
+                     }
+                 } catch (e) {
+                     console.log(`EPSG:${code} 변환 실패:`, e.message);
+                 }
+             }
+             
+             console.log('좌표계 감지 실패, 기본값 EPSG:5186 사용');
+             return "5186"; // 감지 실패 시 기본값
+         }
+ 
+         function getOrCreateLayerGroup(layerName, color) {
+             if (!layerGroups.has(layerName)) {
+                 const group = L.layerGroup();
+                 layerGroups.set(layerName, group);
+ 
+                 // 레이어 컨트롤 UI 추가
+                 const controlEl = document.getElementById('layer-control');
+                 const div = document.createElement('div');
+                 div.className = 'layer-item'; // 새로운 클래스 추가
+                 div.innerHTML = `
+                     <input type="checkbox" id="layer-${layerName}" checked>
+                     <label for="layer-${layerName}" style="color:${color};">${layerName}</label>
+                     <input type="range" class="layer-opacity" min="0" max="1" step="0.1" value="1" onchange="setLayerOpacity(this.id.replace('layer-', ''), this.value)">
+                 `;
+                 controlEl.appendChild(div);
+ 
+                 div.querySelector('input[type="checkbox"]').addEventListener('change', function() {
+                     if (this.checked) {
+                         group.addTo(dxfLayerGroup);
+                     } else {
+                         dxfLayerGroup.removeLayer(group);
+                     }
+                 });
+                 
+                 div.querySelector('.layer-opacity').addEventListener('input', function() {
+                     setLayerOpacity(layerName, this.value);
+                 });
+                 
+                 // 초기 상태로 레이어 추가
+                 group.addTo(dxfLayerGroup);
+             }
+             return layerGroups.get(layerName);
+         }
+         
+         function getStyleForEntity(entity, layerTable) {
+             const layerName = entity.layer || '0';
+             const layerInfo = layerTable ? layerTable[layerName] : null;
+             let color = '#FFFF00'; // 기본색: 노란색
+ 
+             if (entity.colorNumber) {
+                  color = DXF.ACAD_COLOR_PALETTE[entity.colorNumber] ? '#' + DXF.ACAD_COLOR_PALETTE[entity.colorNumber].toString(16).padStart(6, '0') : color;
+             } else if (layerInfo && layerInfo.colorNumber) {
+                  color = DXF.ACAD_COLOR_PALETTE[layerInfo.colorNumber] ? '#' + DXF.ACAD_COLOR_PALETTE[layerInfo.colorNumber].toString(16).padStart(6, '0') : color;
+             }
+             
+             return { color: color, weight: 1, opacity: 0.95 };
+         }
+         
+         // 기존 파서용 스타일 함수
+         function getStyleForEntityLegacy(entity) {
+             const layerName = entity.layer || '0';
+             let color = '#FFFF00'; // 기본색: 노란색
+             
+             // 레이어별 색상 매핑
+             const layerColors = {
+                 '0': '#FFFF00', 'WALL': '#FFFF00', 'DOOR': '#00FF00', 'WINDOW': '#0000FF',
+                 'DIMENSION': '#FFFF00', 'TEXT': '#FF00FF', 'HATCH': '#00FFFF', 'CENTER': '#FF8000',
+                 'HIDDEN': '#808080', 'BORDER': '#FF0000', 'UTILITY': '#008000', 'EQUIPMENT': '#800000',
+                 'ANNOTATION': '#000080', 'ROAD': '#FFFF00', 'BUILDING': '#FFFF00', 'STRUCTURE': '#FF0000',
+                 'PIPE': '#00FFFF', 'ELECTRICAL': '#FF00FF', 'MECHANICAL': '#FF8000'
+             };
+             
+             if (layerColors[layerName]) {
+                 color = layerColors[layerName];
+             }
+             
+             return { color: color, weight: 0.8, opacity: 0.95 };
+         }
+ 
+         function entityToLatLngs(entity, epsg) {
+             let latlngs = [], type = 'polyline', radius = 0;
+             const transform = (p) => {
+                 if(!p || typeof p.x === 'undefined' || typeof p.y === 'undefined') return null;
+                 const [lon, lat] = proj4(`EPSG:${epsg}`, "EPSG:4326", [p.x, p.y]);
+                 return [lat, lon];
+             };
+ 
+             switch (entity.type) {
+                 case 'LINE':
+                     latlngs = [transform(entity.startPoint), transform(entity.endPoint)].filter(p => p);
+                     break;
+                 case 'LWPOLYLINE':
+                 case 'POLYLINE':
+                     latlngs = entity.vertices.map(transform).filter(p => p);
+                     break;
+                 case 'CIRCLE':
+                     const centerLatLng = transform(entity.center);
+                     if(centerLatLng) {
+                         latlngs.push(centerLatLng);
+                         // 원의 반지름을 지도 단위(미터)로 근사 계산
+                         const edgePoint = { x: entity.center.x + entity.radius, y: entity.center.y };
+                         const edgeLatLng = transform(edgePoint);
+                         radius = L.latLng(centerLatLng).distanceTo(L.latLng(edgeLatLng));
+                         type = 'circle';
+                     }
+                     break;
+                 case 'ARC':
+                     // ARC를 Polyline으로 근사화 (10개 점 사용)
+                     const arcPoints = [];
+                     const startAngle = entity.startAngle * Math.PI / 180;
+                     const endAngle = entity.endAngle * Math.PI / 180;
+                     const angleStep = (endAngle - startAngle) / 10;
+                     for (let i = 0; i <= 10; i++) {
+                         const angle = startAngle + i * angleStep;
+                         arcPoints.push({
+                             x: entity.center.x + entity.radius * Math.cos(angle),
+                             y: entity.center.y + entity.radius * Math.sin(angle)
+                         });
+                     }
+                     latlngs = arcPoints.map(transform).filter(p => p);
+                     break;
+                 // 용지도 관련 추가 엔티티들
+                 case 'TEXT':
+                 case 'MTEXT':
+                     if (entity.startPoint) {
+                         latlngs = [transform(entity.startPoint)];
+                         type = 'text';
+                     }
+                     break;
+                 case 'DIMENSION':
+                     if (entity.definitionPoint) {
+                         latlngs = [transform(entity.definitionPoint)];
+                         type = 'dimension';
+                     }
+                     break;
+                 case 'HATCH':
+                     if (entity.boundaryPaths && entity.boundaryPaths.length > 0) {
+                         // HATCH의 경계선을 Polyline으로 변환
+                         for (const path of entity.boundaryPaths) {
+                             if (path.edges) {
+                                 for (const edge of path.edges) {
+                                     if (edge.type === 'LINE') {
+                                         latlngs.push(transform(edge.startPoint), transform(edge.endPoint));
+                                     }
+                                 }
+                             }
+                         }
+                     }
+                     break;
+                 case 'INSERT':
+                     if (entity.insertionPoint) {
+                         latlngs = [transform(entity.insertionPoint)];
+                         type = 'insert';
+                     }
+                     break;
+                 case 'POINT':
+                     if (entity.position) {
+                         latlngs = [transform(entity.position)];
+                         type = 'point';
+                     }
+                     break;
+                 case 'SPLINE':
+                     if (entity.controlPoints && entity.controlPoints.length > 0) {
+                         // SPLINE을 근사화하여 Polyline으로 변환
+                         latlngs = entity.controlPoints.map(transform).filter(p => p);
+                         type = 'spline';
+                     }
+                     break;
+                 case 'ELLIPSE':
+                     if (entity.center) {
+                         const centerLatLng = transform(entity.center);
+                         if (centerLatLng) {
+                             latlngs.push(centerLatLng);
+                             // 타원을 원으로 근사화
+                             const majorAxis = entity.majorAxis || { x: 1, y: 0 };
+                             const majorPoint = { 
+                                 x: entity.center.x + majorAxis.x, 
+                                 y: entity.center.y + majorAxis.y 
+                             };
+                             const majorLatLng = transform(majorPoint);
+                             if (majorLatLng) {
+                                 radius = L.latLng(centerLatLng).distanceTo(L.latLng(majorLatLng));
+                                 type = 'ellipse';
+                             }
+                         }
+                     }
+                     break;
+             }
+             return { latlngs, type, radius };
+         }
+         
+         // 기존 파서용 엔티티 변환 함수
+         function entityToLatLngsLegacy(entity, epsg) {
+             let latlngs = [], type = 'polyline', radius = 0;
+             const transform = (p) => {
+                 if(!p || typeof p.x === 'undefined' || typeof p.y === 'undefined') return null;
+                 const [lon, lat] = proj4(`EPSG:${epsg}`, "EPSG:4326", [p.x, p.y]);
+                 return [lat, lon];
+             };
+ 
+             switch (entity.type) {
+                 case 'LINE':
+                     if (entity.vertices && entity.vertices.length >= 2) {
+                         latlngs = [transform(entity.vertices[0]), transform(entity.vertices[1])].filter(p => p);
+                     }
+                     break;
+                 case 'LWPOLYLINE':
+                 case 'POLYLINE':
+                     if (entity.vertices && entity.vertices.length >= 2) {
+                         latlngs = entity.vertices.map(transform).filter(p => p);
+                     }
+                     break;
+                 case 'CIRCLE':
+                     if (entity.center) {
+                         const centerLatLng = transform(entity.center);
+                         if(centerLatLng) {
+                             latlngs.push(centerLatLng);
+                             // 원의 반지름을 지도 단위(미터)로 근사 계산
+                             const edgePoint = { x: entity.center.x + entity.radius, y: entity.center.y };
+                             const edgeLatLng = transform(edgePoint);
+                             if (edgeLatLng) {
+                                 radius = L.latLng(centerLatLng).distanceTo(L.latLng(edgeLatLng));
+                                 type = 'circle';
+                             }
+                         }
+                     }
+                     break;
+                 case 'ARC':
+                     if (entity.center && entity.radius && entity.startAngle !== undefined && entity.endAngle !== undefined) {
+                         // ARC를 Polyline으로 근사화 (10개 점 사용)
+                         const arcPoints = [];
+                         const startAngle = entity.startAngle * Math.PI / 180;
+                         const endAngle = entity.endAngle * Math.PI / 180;
+                         const angleStep = (endAngle - startAngle) / 10;
+                         for (let i = 0; i <= 10; i++) {
+                             const angle = startAngle + i * angleStep;
+                             arcPoints.push({
+                                 x: entity.center.x + entity.radius * Math.cos(angle),
+                                 y: entity.center.y + entity.radius * Math.sin(angle)
+                             });
+                         }
+                         latlngs = arcPoints.map(transform).filter(p => p);
+                     }
+                     break;
+                 // 용지도 관련 추가 엔티티들 (기존 파서용)
+                 case 'TEXT':
+                 case 'MTEXT':
+                     if (entity.startPoint) {
+                         latlngs = [transform(entity.startPoint)];
+                         type = 'text';
+                     }
+                     break;
+                 case 'DIMENSION':
+                     if (entity.definitionPoint) {
+                         latlngs = [transform(entity.definitionPoint)];
+                         type = 'dimension';
+                     }
+                     break;
+                 case 'HATCH':
+                     if (entity.boundaryPaths && entity.boundaryPaths.length > 0) {
+                         // HATCH의 경계선을 Polyline으로 변환하고 면적 채우기
+                         for (const path of entity.boundaryPaths) {
+                             if (path.edges) {
+                                 const boundaryPoints = [];
+                                 for (const edge of path.edges) {
+                                     if (edge.type === 'LINE') {
+                                         const startPoint = transform(edge.startPoint);
+                                         const endPoint = transform(edge.endPoint);
+                                         if (startPoint && endPoint) {
+                                             boundaryPoints.push(startPoint, endPoint);
+                                         }
+                                     }
+                                 }
+                                 if (boundaryPoints.length >= 3) {
+                                     // 면적 채우기를 위한 폴리곤 생성
+                                     latlngs = boundaryPoints;
+                                     type = 'hatch';
+                                 }
+                             }
+                         }
+                     }
+                     break;
+                 case 'INSERT':
+                     if (entity.insertionPoint) {
+                         latlngs = [transform(entity.insertionPoint)];
+                         type = 'insert';
+                     }
+                     break;
+                 case 'POINT':
+                     if (entity.position) {
+                         latlngs = [transform(entity.position)];
+                         type = 'point';
+                     }
+                     break;
+                 case 'SPLINE':
+                     if (entity.controlPoints && entity.controlPoints.length > 0) {
+                         // SPLINE을 근사화하여 Polyline으로 변환
+                         latlngs = entity.controlPoints.map(transform).filter(p => p);
+                         type = 'spline';
+                     }
+                     break;
+                 case 'ELLIPSE':
+                     if (entity.center) {
+                         const centerLatLng = transform(entity.center);
+                         if (centerLatLng) {
+                             latlngs.push(centerLatLng);
+                             // 타원을 원으로 근사화
+                             const majorAxis = entity.majorAxis || { x: 1, y: 0 };
+                             const majorPoint = { 
+                                 x: entity.center.x + majorAxis.x, 
+                                 y: entity.center.y + majorAxis.y 
+                             };
+                             const majorLatLng = transform(majorPoint);
+                             if (majorLatLng) {
+                                 radius = L.latLng(centerLatLng).distanceTo(L.latLng(majorPoint));
+                                 type = 'ellipse';
+                             }
+                         }
+                     }
+                     break;
+             }
+             return { latlngs, type, radius };
+         }
+
+                 // STA. 값 계산 함수 (기준점 데이터 기반)
+        function calculateSTA(latlng, stationStart = 0) {
+            // 클릭한 위치를 EPSG:5186 좌표로 변환
+            const [clickX, clickY] = proj4('EPSG:4326', 'EPSG:5186', [latlng.lng, latlng.lat]);
+            
+            let minDistance = Infinity;
+            let closestSTA = '계산 불가';
+            let closestPoint = null;
+            
+            // 모든 기준점과의 거리 계산하여 가장 가까운 지점 찾기
+            referencePoints.forEach(point => {
+                const distance = Math.sqrt(
+                    Math.pow(clickX - point.x, 2) + Math.pow(clickY - point.y, 2)
+                );
+                
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestPoint = point;
+                }
+            });
+            
+            if (closestPoint) {
+                // 기준점에서 클릭한 지점까지의 실제 거리 계산 (미터 단위)
+                const distanceFromReference = Math.sqrt(
+                    Math.pow(clickX - closestPoint.x, 2) + Math.pow(clickY - closestPoint.y, 2)
+                );
+                
+                // 노선 진행 방향을 고려한 STA 값 계산
+                // 기준점의 STA 값에 거리 차이를 더하거나 빼기
+                let estimatedSTA = closestPoint.sta;
+                
+                // 클릭한 지점이 기준점보다 노선 진행 방향에 있는지 판단
+                // 간단한 방법: Y 좌표가 작을수록 노선 진행 방향 (25km → 27km)
+                const isForward = clickY < closestPoint.y;
+                
+                if (isForward) {
+                    // 노선 진행 방향: STA 값 증가
+                    estimatedSTA = closestPoint.sta + distanceFromReference;
+                } else {
+                    // 노선 반대 방향: STA 값 감소
+                    estimatedSTA = closestPoint.sta - distanceFromReference;
+                }
+                
+                // STA. 형식으로 변환 (km+m 형식)
+                const km = Math.floor(estimatedSTA / 1000);
+                const m = Math.round(estimatedSTA % 1000);
+                closestSTA = `STA. ${km}km${m.toString().padStart(3, '0')}`;
+                
+                // 디버깅용 콘솔 출력
+                console.log(`기준점: STA.${closestPoint.sta}m (${closestPoint.x}, ${closestPoint.y})`);
+                console.log(`클릭위치: (${clickX.toFixed(3)}, ${clickY.toFixed(3)})`);
+                console.log(`거리: ${distanceFromReference.toFixed(2)}m`);
+                console.log(`방향: ${isForward ? '진행방향' : '반대방향'}`);
+                console.log(`계산된 STA: ${estimatedSTA.toFixed(2)}m`);
+            }
+            
+            return closestSTA;
+        }
+        
+        // 레이어 투명도 설정 (개선된 버전)
+        function setLayerOpacity(layerName, opacity) {
+            const layerGroup = layerGroups.get(layerName);
+            if (layerGroup) {
+                // 레이어 그룹 내의 모든 레이어에 투명도 적용
+                layerGroup.eachLayer(function(layer) {
+                    if (layer.setStyle) {
+                        layer.setStyle({ opacity: opacity });
+                    }
+                });
+            }
+        }
+    </script>
+</body>
+</html>
