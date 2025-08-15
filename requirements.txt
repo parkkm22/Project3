@@ -1,15 +1,33 @@
+# Construction Status Management System Dependencies
+# Streamlit 웹 애플리케이션 프레임워크
 streamlit>=1.28.0
-pandas>=1.5.0
+
+# 데이터 처리 및 분석
+pandas>=2.0.0
+numpy>=1.24.0
+
+# 고급 데이터 그리드 컴포넌트
+streamlit-aggrid>=0.3.4
+
+# Supabase 데이터베이스 연동
+supabase>=2.0.0
+
+# 환경변수 관리
+python-dotenv>=1.0.0
+
+# AI 및 문서 처리
 google-generativeai>=0.3.0
 pdfplumber>=0.9.0
 pdf2image>=1.16.0
+
+# 엑셀 및 보고서 생성
 openpyxl>=3.1.0
 reportlab>=4.0.0
-requests>=2.28.0
-supabase>=2.0.0
-python-dotenv>=1.0.0
-streamlit-aggrid>=0.3.0
-plotly>=5.15.0
-numpy>=1.24.0
+
+# HTTP 요청 및 네트워킹
+requests>=2.31.0
+httpx>=0.24.0
 urllib3>=1.26.0
-httpx>=0.24.0 
+
+# 데이터 시각화
+plotly>=5.15.0

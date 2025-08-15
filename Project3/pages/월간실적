@@ -1,0 +1,794 @@
+import streamlit as st
+import pandas as pd
+from supabase import create_client, Client
+from datetime import datetime, date
+import calendar
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, DataReturnMode, JsCode
+
+# 페이지 설정
+st.set_page_config(
+    page_title="월간실적 - 시공현황",
+    page_icon="📊",
+    layout="wide"
+)
+
+# Supabase 연결 설정
+@st.cache_resource
+def init_supabase():
+    try:
+        # secrets.toml에서 Supabase 정보 가져오기
+        url = st.secrets["SUPABASE_URL"]
+        key = st.secrets["SUPABASE_KEY"]
+        
+        return create_client(url, key)
+    except Exception as e:
+        st.error(f"Supabase 연결 정보를 가져올 수 없습니다: {str(e)}")
+        st.info("secrets.toml 파일에 SUPABASE_URL과 SUPABASE_KEY가 올바르게 설정되어 있는지 확인해주세요.")
+        return None
+
+# 사용 가능한 테이블 목록 가져오기
+@st.cache_data(ttl=3600)
+def get_available_tables():
+    try:
+        supabase = init_supabase()
+        
+        if supabase is None:
+            return []
+        
+        # PostgreSQL 시스템 테이블에서 사용자 테이블 목록 가져오기
+        response = supabase.rpc('get_tables').execute()
+        return response.data if response.data else []
+    except:
+        # RPC가 실패하면 직접 쿼리 시도
+        try:
+            response = supabase.table('information_schema.tables').select('table_name').eq('table_schema', 'public').execute()
+            return [item['table_name'] for item in response.data] if response.data else []
+        except:
+            return []
+
+# construction_status 데이터 가져오기
+@st.cache_data(ttl=3600)  # 1시간마다 캐시 갱신
+def get_construction_status():
+    try:
+        supabase = init_supabase()
+        
+        if supabase is None:
+            return pd.DataFrame()
+        
+        # construction_status 테이블에서 데이터 가져오기
+        response = supabase.table('construction_status').select('*').execute()
+        
+        if response.data:
+            df = pd.DataFrame(response.data)
+            st.success(f"데이터 가져오기 성공! 총 {len(df)} 건의 데이터를 가져왔습니다.")
+            
+            # 테이블 구조 확인을 위한 디버깅 정보
+            st.info(f"테이블 컬럼: {list(df.columns)}")
+            if not df.empty:
+                st.info(f"첫 번째 행 데이터: {df.iloc[0].to_dict()}")
+            
+            # 날짜 컬럼을 datetime으로 변환
+            if '날짜' in df.columns:
+                df['날짜'] = pd.to_datetime(df['날짜'])
+            elif 'date' in df.columns:
+                df['날짜'] = pd.to_datetime(df['date'])
+            elif 'created_at' in df.columns:
+                df['날짜'] = pd.to_datetime(df['created_at'])
+            
+            # 위치 컬럼 확인
+            if '위치' not in df.columns:
+                # 위치 관련 컬럼 찾기
+                location_cols = [col for col in df.columns if '위치' in col or 'location' in col.lower() or 'name' in col.lower()]
+                if location_cols:
+                    df['위치'] = df[location_cols[0]]
+                    st.info(f"'{location_cols[0]}' 컬럼을 '위치'로 매핑했습니다.")
+                else:
+                    st.warning("위치 정보를 찾을 수 없습니다. 첫 번째 컬럼을 위치로 사용합니다.")
+                    df['위치'] = df.iloc[:, 0]
+            
+            # 진행률 컬럼 확인
+            if '진행률' not in df.columns:
+                # 진행률 관련 컬럼 찾기
+                progress_cols = [col for col in df.columns if '진행률' in col or 'progress' in col.lower() or 'rate' in col.lower() or 'percent' in col.lower()]
+                if progress_cols:
+                    df['진행률'] = df[progress_cols[0]]
+                    st.info(f"'{progress_cols[0]}' 컬럼을 '진행률'로 매핑했습니다.")
+                else:
+                    st.warning("진행률 정보를 찾을 수 없습니다. 숫자 컬럼을 찾아 진행률로 사용합니다.")
+                    numeric_cols = df.select_dtypes(include=['number']).columns
+                    if len(numeric_cols) > 0:
+                        df['진행률'] = df[numeric_cols[0]]
+                        st.info(f"'{numeric_cols[0]}' 컬럼을 '진행률'로 사용합니다.")
+                    else:
+                        df['진행률'] = 0
+            
+            return df
+        else:
+            st.warning("construction_status 테이블에 데이터가 없습니다.")
+            return pd.DataFrame()
+    except Exception as e:
+        st.error(f"데이터 가져오기 오류: {str(e)}")
+        # 더 자세한 오류 정보 표시
+        st.error("테이블이 존재하지 않거나 접근 권한이 없을 수 있습니다.")
+        return pd.DataFrame()
+
+# 항상 보여지는 테이블 구조 생성
+def create_base_table():
+    # 기본 구조 생성 (항상 보여짐)
+    construction_items = [
+        "1. 본선터널 (1구간, 대림-신풍)",
+        "1. 본선터널 (1구간, 대림-신풍) 라이닝",
+        "2. 신풍정거장 - 1)정거장 라이닝",
+        "2. 신풍정거장 - 1)정거장 미들 슬라브",
+        "2. 신풍정거장 - 2)주출입구 수직구 라이닝",
+        "2. 신풍정거장 - 2)주출입구 - (1)PCB 정거장 방면 라이닝",
+        "2. 신풍정거장 - 2)주출입구 - (1)PCB 환승통로 방면 라이닝",
+        "2. 신풍정거장 - 2)주출입구 - (2)PCC 라이닝",
+        "2. 신풍정거장 - 2)주출입구 - (3)PCD 라이닝",
+        "2. 신풍정거장 - 2)주출입구 - (4)PHA 라이닝",
+        "2. 신풍정거장 - 3)특별피난계단 - 수직구 라이닝",
+        "2. 신풍정거장 - 3)특별피난계단 - PHB 라이닝",
+        "2. 신풍정거장 - 4)외부출입구 출입구(#3) 굴착",
+        "2. 신풍정거장 - 4)외부출입구 출입구(#2) 굴착",
+        "2. 신풍정거장 - 4)외부출입구 출입구(#1) 굴착",
+        "3. 신풍 환승통로 - 1)환승터널 연결터널(PCF) 굴착",
+        "3. 신풍 환승통로 - 1)환승터널 연결터널(PCF) 라이닝",
+        "3. 신풍 환승통로 - 1)환승터널 연결터널(PCE) 굴착",
+        "3. 신풍 환승통로 - 1)환승터널 연결터널(PCE) 라이닝",
+        "3. 신풍 환승통로 - 2)개착 BOX 보라매 방면 구조물",
+        "3. 신풍 환승통로 - 2)개착 BOX 대림 방면 굴착",
+        "4. 본선터널(2구간, 신풍-도림) 굴착",
+        "4. 본선터널(2구간, 신풍-도림) 라이닝",
+        "5. 도림사거리정거장 - 1)정거장 터널 라이닝",
+        "5. 도림사거리정거장 - 1)정거장 미들 슬라브",
+        "5. 도림사거리정거장 - 2)출입구#1 수직구 라이닝",
+        "5. 도림사거리정거장 - 2)출입구#1 PCA 라이닝",
+        "5. 도림사거리정거장 - 2)출입구#1 PCC 라이닝",
+        "5. 도림사거리정거장 - 2)출입구#1 PHA 라이닝",
+        "5. 도림사거리정거장 - 3)출입구#2 수직구 라이닝",
+        "5. 도림사거리정거장 - 3)출입구#2 PCA 라이닝",
+        "5. 도림사거리정거장 - 3)출입구#2 PCC 라이닝",
+        "5. 도림사거리정거장 - 3)출입구#2 PHB 라이닝"
+    ]
+    
+    # 기본 테이블 구조 생성
+    base_data = []
+    for item in construction_items:
+        row_data = {
+            '위치': item,
+            '설계': '설계값',  # 실제 설계값은 별도 테이블에서 가져와야 함
+            '전체': 0,        # 고정열
+            '누계': 0,        # 고정열
+            '진도율': 0,      # 고정열
+            '잔여': 0         # 고정열
+        }
+        
+        # 25-01부터 26-12까지의 월별 컬럼들 추가 (고정열)
+        for year in [25, 26]:
+            for month in range(1, 13):
+                month_col = f"{year:02d}-{month:02d}"
+                row_data[month_col] = 0
+        
+        # 사용자가 추가한 열들도 포함
+        if 'custom_columns' in st.session_state:
+            for col_name, default_value in st.session_state.custom_columns.items():
+                row_data[col_name] = default_value
+        
+        base_data.append(row_data)
+    
+    return pd.DataFrame(base_data)
+
+# 사용자 정의 열 추가 함수
+def add_custom_column():
+    if 'custom_columns' not in st.session_state:
+        st.session_state.custom_columns = {}
+    
+    with st.expander("➕ 새로운 열 추가", expanded=False):
+        col1, col2, col3 = st.columns([2, 2, 1])
+        
+        with col1:
+            new_column_name = st.text_input("새 열 이름", placeholder="예: 계약금액, 완료율 등")
+        
+        with col2:
+            default_value = st.text_input("기본값", placeholder="예: 0, 미완료 등")
+        
+        with col3:
+            if st.button("열 추가", type="primary"):
+                if new_column_name and new_column_name.strip():
+                    if new_column_name not in ['위치', '설계']:  # 기본 열과 중복 방지
+                        st.session_state.custom_columns[new_column_name.strip()] = default_value if default_value else ""
+                        st.success(f"'{new_column_name}' 열이 추가되었습니다!")
+                        st.rerun()
+                    else:
+                        st.error("'위치'와 '설계'는 기본 열명이므로 사용할 수 없습니다.")
+                else:
+                    st.error("열 이름을 입력해주세요.")
+        
+        # 현재 추가된 열들 표시 및 삭제
+        if st.session_state.custom_columns:
+            st.write("**추가된 열들:**")
+            for col_name, default_val in st.session_state.custom_columns.items():
+                col_a, col_b = st.columns([3, 1])
+                with col_a:
+                    st.write(f"• {col_name}: {default_val}")
+                with col_b:
+                    if st.button(f"삭제", key=f"del_{col_name}"):
+                        del st.session_state.custom_columns[col_name]
+                        st.success(f"'{col_name}' 열이 삭제되었습니다!")
+                        st.rerun()
+
+# 월간 누계 계산 (Supabase 데이터와 결합)
+def calculate_monthly_cumulative(base_df, supabase_df):
+    if supabase_df.empty:
+        return base_df
+    
+    # 결과 데이터프레임 복사
+    result_df = base_df.copy()
+    
+    # 25년과 26년의 월별 데이터 처리
+    for year in [25, 26]:
+        for month in range(1, 13):
+            # 해당 월의 마지막 날짜 계산
+            full_year = 2000 + year  # 2025, 2026
+            last_day = calendar.monthrange(full_year, month)[1]
+            month_end_date = date(full_year, month, last_day)
+            
+            # 해당 월의 마지막 날짜까지의 데이터 필터링
+            month_data = supabase_df[
+                (supabase_df['날짜'].dt.year == full_year) & 
+                (supabase_df['날짜'].dt.month == month)
+            ]
+            
+            if not month_data.empty:
+                # 해당 월의 마지막 날짜 데이터만 사용
+                last_date_data = month_data[month_data['날짜'].dt.date <= month_end_date]
+                if not last_date_data.empty:
+                    # 각 위치별로 누계값 계산
+                    for idx, row in result_df.iterrows():
+                        location = row['위치']
+                        location_data = last_date_data[last_date_data['위치'] == location]
+                        
+                        if not location_data.empty:
+                            # 누계값 계산 (실제 컬럼명에 맞게 수정 필요)
+                            cumulative = location_data['진행률'].sum() if '진행률' in location_data.columns else 0
+                            # 월별 컬럼에 값 설정
+                            month_col = f"{year:02d}-{month:02d}"
+                            result_df.at[idx, month_col] = cumulative
+                        else:
+                            # 해당 위치에 데이터가 없으면 0으로 설정
+                            month_col = f"{year:02d}-{month:02d}"
+                            result_df.at[idx, month_col] = 0
+                else:
+                    # 해당 월에 데이터가 없으면 0으로 설정
+                    for idx in result_df.index:
+                        month_col = f"{year:02d}-{month:02d}"
+                        result_df.at[idx, month_col] = 0
+            else:
+                # 해당 월에 데이터가 없으면 0으로 설정
+                for idx in result_df.index:
+                    month_col = f"{year:02d}-{month:02d}"
+                    result_df.at[idx, month_col] = 0
+    
+    # 기존 월별 누계 및 대비 계산 (1월부터 7월까지)
+    current_year = 2025
+    months = list(range(1, 8))
+    
+    for month in months:
+        # 해당 월의 마지막 날짜 계산
+        last_day = calendar.monthrange(current_year, month)[1]
+        month_end_date = date(current_year, month, last_day)
+        
+        # 해당 월의 마지막 날짜까지의 데이터 필터링
+        month_data = supabase_df[
+            (supabase_df['날짜'].dt.year == current_year) & 
+            (supabase_df['날짜'].dt.month == month)
+        ]
+        
+        if not month_data.empty:
+            # 해당 월의 마지막 날짜 데이터만 사용
+            last_date_data = month_data[month_data['날짜'].dt.date <= month_end_date]
+            if not last_date_data.empty:
+                # 각 위치별로 누계값 계산
+                for idx, row in result_df.iterrows():
+                    location = row['위치']
+                    location_data = last_date_data[last_date_data['위치'] == location]
+                    
+                    if not location_data.empty:
+                        # 누계값 계산 (실제 컬럼명에 맞게 수정 필요)
+                        cumulative = location_data['진행률'].sum() if '진행률' in location_data.columns else 0
+                        # 대비값 계산 (설계값 대비)
+                        design_value = 100  # 실제 설계값으로 대체 필요
+                        comparison = cumulative - design_value
+                    else:
+                        cumulative = 0
+                        comparison = 0
+                    
+                    result_df.at[idx, f'{month:02d}월_누계'] = cumulative
+                    result_df.at[idx, f'{month:02d}월_대비'] = comparison
+            else:
+                # 해당 월에 데이터가 없으면 0으로 설정
+                for idx in result_df.index:
+                    result_df.at[idx, f'{month:02d}월_누계'] = 0
+                    result_df.at[idx, f'{month:02d}월_대비'] = 0
+        else:
+            # 해당 월에 데이터가 없으면 0으로 설정
+            for idx in result_df.index:
+                result_df.at[idx, f'{month:02d}월_누계'] = 0
+                result_df.at[idx, f'{month:02d}월_대비'] = 0
+    
+    return result_df
+
+# AgGrid 설정 함수
+def configure_aggrid(df, title, height=400, is_base_table=False):
+    gb = GridOptionsBuilder.from_dataframe(df)
+    
+    # 기본 설정
+    gb.configure_default_column(
+        resizable=True,
+        filterable=True,
+        sortable=True,
+        editable=False
+    )
+    
+    # 고정열 설정 (편집 불가)
+    fixed_columns = ["위치", "전체", "누계", "진도율", "잔여"]
+    
+    # 위치 컬럼 설정 (넓게, 편집 불가)
+    gb.configure_column("위치", width=350, pinned="left", editable=False)
+    
+    # 설계 컬럼 설정 (편집 가능)
+    gb.configure_column("설계", width=150, pinned="left", editable=True, 
+                       type=['textColumn', 'textColumnFilter'])
+    
+    # 사용자 정의 열들 설정 (편집 가능)
+    if 'custom_columns' in st.session_state:
+        for col_name in st.session_state.custom_columns.keys():
+            gb.configure_column(col_name, 
+                               width=150,
+                               type=['textColumn', 'textColumnFilter'],
+                               editable=True)
+    
+    # 고정열들 설정 (편집 불가)
+    for col in fixed_columns:
+        if col in df.columns:
+            if col == "위치":
+                continue  # 이미 설정됨
+            elif col == "전체":
+                gb.configure_column(col, width=150, editable=False)
+            elif col == "누계":
+                gb.configure_column(col, width=150, editable=False)
+            elif col == "진도율":
+                gb.configure_column(col, width=150, editable=False)
+            elif col == "잔여":
+                gb.configure_column(col, width=150, editable=False)
+    
+    # 월별 컬럼들 설정 (25-01부터 26-12까지, 편집 불가)
+    for year in [25, 26]:
+        for month in range(1, 13):
+            month_col = f"{year:02d}-{month:02d}"
+            if month_col in df.columns:
+                gb.configure_column(month_col, 
+                                   header_name=f"{year:02d}-{month:02d}",
+                                   width=150,
+                                   type=['numericColumn', 'numberColumnFilter'],
+                                   valueFormatter="value.toFixed(2)",
+                                   editable=False)
+    
+    # 기본 테이블이 아닌 경우 (월간 누계 테이블) 기존 월별 컬럼들도 편집 가능하게 설정
+    if not is_base_table:
+        # 기존 월별 컬럼들 설정 (편집 가능)
+        for month in range(1, 8):
+            month_str = f'{month:02d}월'
+            if f'{month_str}_누계' in df.columns:
+                gb.configure_column(f'{month_str}_누계', 
+                                   header_name=f'{month_str} 누계',
+                                   width=150,
+                                   type=['numericColumn', 'numberColumnFilter'],
+                                   valueFormatter="value.toFixed(2)",
+                                   editable=True)
+            if f'{month_str}_대비' in df.columns:
+                gb.configure_column(f'{month_str}_대비', 
+                                   header_name=f'{month_str} 대비',
+                                   width=150,
+                                   type=['numericColumn', 'numberColumnFilter'],
+                                   valueFormatter="value.toFixed(2)",
+                                   editable=True)
+    else:
+        # 기본 테이블인 경우 기존 월별 컬럼들 설정 (편집 불가)
+        for month in range(1, 8):
+            month_str = f'{month:02d}월'
+            if f'{month_str}_누계' in df.columns:
+                gb.configure_column(f'{month_str}_누계', 
+                                   header_name=f'{month_str} 누계',
+                                   width=150,
+                                   type=['numericColumn', 'numberColumnFilter'],
+                                   valueFormatter="value.toFixed(2)",
+                                   editable=False)
+            if f'{month_str}_대비' in df.columns:
+                gb.configure_column(f'{month_str}_대비', 
+                                   header_name=f'{month_str} 대비',
+                                   width=150,
+                                   type=['numericColumn', 'numberColumnFilter'],
+                                   valueFormatter="value.toFixed(2)",
+                                   editable=False)
+    
+    # 그리드 옵션 설정
+    gb.configure_grid_options(
+        domLayout='normal',
+        rowHeight=35,
+        headerHeight=50,
+        suppressRowClickSelection=True,
+        enableRangeSelection=True,
+        rowSelection='multiple',
+        suppressHorizontalScroll=False,  # 가로 스크롤 활성화
+        suppressColumnVirtualisation=False,  # 열 가상화 비활성화하여 모든 열이 렌더링되도록 함
+        # 드래그 복사 기능을 위한 추가 설정
+        allowRangeSelection=True,
+        enableRangeHandle=True,
+        enableFillHandle=True,
+        suppressCopyRowsToClipboard=False,
+        suppressCopySingleCellRanges=False,
+        suppressPasteSingleCellRanges=False,
+        suppressPasteMultipleCellRanges=False,
+        # 클립보드 복사 설정
+        clipboardDelimiter='\t',  # 탭으로 구분하여 Excel 호환성 향상
+        # 드래그 선택 시 시각적 피드백
+        enableCellTextSelection=True,
+        suppressRowDeselection=False
+    )
+    
+    # 페이지네이션 설정
+    gb.configure_pagination(
+        enabled=True,
+        paginationAutoPageSize=False,
+        paginationPageSize=20
+    )
+    
+    # 도구 모음 설정
+    gb.configure_side_bar()
+    
+    grid_options = gb.build()
+    
+    # AgGrid 렌더링
+    grid_response = AgGrid(
+        df,
+        grid_options=grid_options,
+        data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
+        update_mode=GridUpdateMode.SELECTION_CHANGED,
+        fit_columns_on_grid_load=False,  # 모든 열이 완전히 보이도록 설정
+        height=height,
+        allow_unsafe_jscode=True,
+        theme="streamlit",
+        # 드래그 복사 기능을 위한 JavaScript 코드
+        js_code=JsCode("""
+            // 그리드 준비 완료 시 실행되는 함수
+            function onGridReady(params) {
+                console.log('Grid is ready');
+                
+                // 범위 선택 이벤트 리스너
+                params.api.addEventListener('rangeSelectionChanged', function(event) {
+                    console.log('Range selection changed:', event);
+                });
+                
+                // 키보드 이벤트 리스너 (Ctrl+C)
+                params.api.addEventListener('keydown', function(event) {
+                    if (event.ctrlKey && event.key === 'c') {
+                        console.log('Ctrl+C pressed');
+                        copySelectedRanges(params.api);
+                    }
+                });
+                
+                // 마우스 이벤트 리스너 (드래그 복사)
+                params.api.addEventListener('mouseup', function(event) {
+                    console.log('Mouse up event:', event);
+                });
+            }
+            
+            // 선택된 범위를 클립보드에 복사하는 함수
+            function copySelectedRanges(api) {
+                try {
+                    var selectedRanges = api.getCellRanges();
+                    console.log('Selected ranges:', selectedRanges);
+                    
+                    if (selectedRanges && selectedRanges.length > 0) {
+                        var data = [];
+                        
+                        selectedRanges.forEach(function(range) {
+                            var rowData = [];
+                            
+                            for (var rowIndex = range.startRow.rowIndex; rowIndex <= range.endRow.rowIndex; rowIndex++) {
+                                for (var colIndex = range.startColumn.colIndex; colIndex <= range.endColumn.colIndex; colIndex++) {
+                                    var value = api.getValue(range.startColumn.colId, rowIndex);
+                                    rowData.push(value || '');
+                                }
+                                data.push(rowData.join('\\t'));
+                            }
+                        });
+                        
+                        var text = data.join('\\n');
+                        console.log('Data to copy:', text);
+                        
+                        // 클립보드에 복사
+                        navigator.clipboard.writeText(text).then(function() {
+                            console.log('Data copied to clipboard successfully');
+                        }).catch(function(err) {
+                            console.error('Failed to copy to clipboard:', err);
+                            // 대체 방법: 임시 textarea 사용
+                            fallbackCopyTextToClipboard(text);
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error copying data:', error);
+                }
+            }
+            
+            // 클립보드 복사 대체 방법
+            function fallbackCopyTextToClipboard(text) {
+                var textArea = document.createElement("textarea");
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                
+                try {
+                    var successful = document.execCommand('copy');
+                    if (successful) {
+                        console.log('Data copied using fallback method');
+                    }
+                } catch (err) {
+                    console.error('Fallback copy failed:', err);
+                }
+                
+                document.body.removeChild(textArea);
+            }
+            
+            // 그리드 준비 완료 시 이벤트 리스너 등록
+            if (typeof onGridReady === 'function') {
+                onGridReady(params);
+            }
+        """)
+    )
+    
+    return grid_response
+
+# 메인 페이지
+st.title("📊 월간실적 - Construction Status")
+
+# 드래그 복사 기능 안내
+with st.expander("📋 드래그 복사 기능 사용법", expanded=False):
+    st.markdown("""
+    **Excel과 같은 드래그 복사 기능이 활성화되었습니다!**
+    
+    **사용 방법:**
+    1. **마우스 드래그**: 셀을 드래그하여 범위 선택
+    2. **Ctrl+C**: 선택된 범위를 클립보드에 복사
+    3. **Excel에 붙여넣기**: 복사된 데이터를 Excel에 붙여넣기 가능
+    
+    **지원 기능:**
+    - 단일 셀 선택 및 복사
+    - 여러 셀 범위 선택 및 복사
+    - 행/열 전체 선택 및 복사
+    - 탭으로 구분된 데이터 형식 (Excel 호환)
+    
+    **문제 해결:**
+    - 복사가 안 될 때: 브라우저 개발자 도구(F12)의 Console 탭을 확인해주세요
+    - 드래그 선택이 안 될 때: 셀을 클릭한 후 드래그해보세요
+    """)
+    
+    # 디버깅 정보 표시
+    if st.button("🔍 드래그 복사 상태 확인"):
+        st.info("""
+        **현재 설정된 드래그 복사 옵션:**
+        - ✅ enableRangeSelection: True
+        - ✅ allowRangeSelection: True
+        - ✅ enableRangeHandle: True
+        - ✅ enableFillHandle: True
+        - ✅ suppressCopySingleCellRanges: False
+        - ✅ clipboardDelimiter: 탭(\\t)
+        
+        **JavaScript 기능:**
+        - ✅ 그리드 준비 완료 이벤트
+        - ✅ 범위 선택 변경 이벤트
+        - ✅ Ctrl+C 키보드 이벤트
+        - ✅ 클립보드 복사 (navigator.clipboard)
+        - ✅ 대체 복사 방법 (document.execCommand)
+        """)
+
+# 데이터 새로고침 버튼
+col1, col2, col3 = st.columns([1, 2, 1])
+with col2:
+    if st.button("🔄 데이터 새로고침", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
+
+# Supabase 연결 테스트
+with st.expander("🔌 Supabase 연결 테스트", expanded=False):
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🔗 연결 테스트"):
+            try:
+                supabase = init_supabase()
+                if supabase:
+                    st.success("✅ Supabase 연결 성공!")
+                    
+                    # 테이블 목록 가져오기
+                    try:
+                        response = supabase.table('information_schema.tables').select('table_name').eq('table_schema', 'public').execute()
+                        if response.data:
+                            tables = [item['table_name'] for item in response.data]
+                            st.info(f"사용 가능한 테이블: {', '.join(tables)}")
+                        else:
+                            st.warning("테이블 목록을 가져올 수 없습니다.")
+                    except Exception as e:
+                        st.error(f"테이블 목록 조회 오류: {str(e)}")
+                else:
+                    st.error("❌ Supabase 연결 실패!")
+            except Exception as e:
+                st.error(f"❌ 연결 테스트 오류: {str(e)}")
+    
+    with col2:
+        if st.button("📊 construction_status 테이블 구조 확인"):
+            try:
+                supabase = init_supabase()
+                if supabase:
+                    # 테이블 구조 확인
+                    response = supabase.table('construction_status').select('*').limit(1).execute()
+                    if response.data:
+                        st.success("✅ construction_status 테이블 접근 성공!")
+                        st.json(response.data[0])  # 첫 번째 행 표시
+                    else:
+                        st.warning("construction_status 테이블에 데이터가 없습니다.")
+                else:
+                    st.error("Supabase 연결이 필요합니다.")
+            except Exception as e:
+                st.error(f"테이블 구조 확인 오류: {str(e)}")
+
+# 사용 가능한 테이블 확인
+with st.spinner("사용 가능한 테이블을 확인하는 중..."):
+    available_tables = get_available_tables()
+
+if available_tables:
+    st.success(f"✅ 사용 가능한 테이블: {', '.join(available_tables)}")
+    
+    # construction_status 테이블이 있는지 확인
+    if 'construction_status' in available_tables:
+        st.success("🎯 construction_status 테이블을 찾았습니다!")
+    else:
+        st.warning("⚠️ construction_status 테이블을 찾을 수 없습니다.")
+        st.info("사용 가능한 테이블 중에서 선택하여 데이터를 확인해보세요.")
+    
+    # 테이블 선택 (디버깅용)
+    with st.expander("🔍 테이블 데이터 미리보기", expanded=False):
+        selected_table = st.selectbox(
+            "미리보기할 테이블을 선택하세요:",
+            available_tables,
+            index=available_tables.index('construction_status') if 'construction_status' in available_tables else 0
+        )
+        
+        if st.button(f"📊 {selected_table} 테이블 미리보기"):
+            with st.spinner(f"{selected_table} 테이블에서 데이터를 가져오는 중..."):
+                try:
+                    supabase = init_supabase()
+                    if supabase:
+                        response = supabase.table(selected_table).select('*').limit(5).execute()
+                        if response.data:
+                            st.success(f"✅ {selected_table} 테이블에서 {len(response.data)} 건의 데이터를 가져왔습니다.")
+                            st.json(response.data)  # 처음 5개 행 표시
+                        else:
+                            st.warning(f"{selected_table} 테이블에 데이터가 없습니다.")
+                except Exception as e:
+                    st.error(f"테이블 접근 오류: {str(e)}")
+else:
+    st.warning("⚠️ 사용 가능한 테이블을 가져올 수 없습니다.")
+    st.info("Supabase 연결을 확인하고 다시 시도해주세요.")
+
+# 항상 보여지는 기본 테이블 생성
+st.subheader("🏗️ 시공현황 기본 구조")
+
+# 사용자 정의 열 추가 기능
+add_custom_column()
+
+st.markdown("---")
+
+base_table = create_base_table()
+
+# 기본 테이블을 AgGrid로 표시
+grid_response_base = configure_aggrid(base_table, "기본 구조", height=1200, is_base_table=True)
+
+# Supabase에서 데이터 가져오기
+with st.spinner("construction_status 테이블에서 데이터를 가져오는 중..."):
+    supabase_df = get_construction_status()
+
+if supabase_df.empty:
+    st.warning("⚠️ construction_status 테이블에서 데이터를 가져올 수 없습니다.")
+    st.info("""
+    **가능한 원인:**
+    1. Supabase 연결 문제
+    2. construction_status 테이블이 존재하지 않음
+    3. 테이블에 데이터가 없음
+    4. 접근 권한 문제
+    
+    **해결 방법:**
+    1. 위의 'Supabase 연결 테스트' 버튼을 클릭하여 연결 상태 확인
+    2. 'construction_status 테이블 구조 확인' 버튼으로 테이블 존재 여부 확인
+    3. '테이블 데이터 미리보기'에서 다른 테이블 확인
+    """)
+else:
+    st.success(f"✅ construction_status 테이블에서 총 {len(supabase_df)} 건의 데이터를 가져왔습니다.")
+    
+    # 데이터 구조 정보 표시
+    with st.expander("📋 데이터 구조 정보", expanded=False):
+        st.write(f"**컬럼 수:** {len(supabase_df.columns)}")
+        st.write(f"**행 수:** {len(supabase_df)}")
+        st.write(f"**컬럼명:** {list(supabase_df.columns)}")
+        st.write(f"**데이터 타입:**")
+        st.write(supabase_df.dtypes)
+    
+    # 월간 누계 계산 (기본 테이블 + Supabase 데이터)
+    try:
+        monthly_df = calculate_monthly_cumulative(base_table, supabase_df)
+        
+        if not monthly_df.empty:
+            # 테이블 표시
+            st.subheader("🏗️ 시공현황 월간 누계")
+            
+            # 컬럼명 정리 (고정열 포함)
+            display_columns = ['위치', '설계', '전체', '누계', '진도율', '잔여']
+            
+            # 사용자 정의 열들 추가
+            if 'custom_columns' in st.session_state:
+                display_columns.extend(list(st.session_state.custom_columns.keys()))
+            
+            # 25-01부터 26-12까지의 월별 컬럼들 추가 (고정열)
+            for year in [25, 26]:
+                for month in range(1, 13):
+                    month_col = f"{year:02d}-{month:02d}"
+                    display_columns.append(month_col)
+            
+            # 기존 월별 누계 및 대비 컬럼들 추가
+            for month in range(1, 8):
+                display_columns.extend([f'{month:02d}월_누계', f'{month:02d}월_대비'])
+            
+            # 존재하는 컬럼만 필터링
+            available_columns = [col for col in display_columns if col in monthly_df.columns]
+            missing_columns = [col for col in display_columns if col not in monthly_df.columns]
+            
+            if missing_columns:
+                st.warning(f"⚠️ 일부 컬럼이 누락되었습니다: {missing_columns}")
+            
+            # 월간 누계 데이터를 AgGrid로 표시
+            monthly_display_df = monthly_df[available_columns].copy()
+            
+            # 숫자 컬럼들을 float로 변환
+            for col in monthly_display_df.columns:
+                if col not in ['위치', '설계']:
+                    monthly_display_df[col] = pd.to_numeric(monthly_display_df[col], errors='coerce').fillna(0)
+            
+            grid_response_monthly = configure_aggrid(monthly_display_df, "월간 누계", height=1200, is_base_table=False)
+            
+            # 데이터 다운로드 버튼
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col2:
+                csv = monthly_df.to_csv(index=False, encoding='utf-8-sig')
+                st.download_button(
+                    label="📥 CSV 다운로드",
+                    data=csv,
+                    file_name=f"시공현황_월간누계_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+        else:
+            st.error("❌ 월간 누계 데이터를 계산할 수 없습니다.")
+    except Exception as e:
+        st.error(f"❌ 월간 누계 계산 중 오류가 발생했습니다: {str(e)}")
+        st.info("데이터 구조를 확인하고 다시 시도해주세요.")
+
+# 사이드바
+st.sidebar.title("📋 메뉴")
+if st.sidebar.button("🏠 메인 페이지로 돌아가기"):
+    st.switch_page("main.py")
+
+# 하단 정보
+st.markdown("---")
+st.markdown("*이 페이지는 항상 보여지는 기본 테이블과 Supabase의 construction_status 테이블에서 월간 누계 데이터를 표시합니다.*")

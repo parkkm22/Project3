@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "command": "python",
+      "args": ["mcp_supabase_server.py"],
+      "env": {
+        "SUPABASE_PASSWORD": "YOUR_SUPABASE_DB_PASSWORD"
+      }
+    }
+  }
+} 
