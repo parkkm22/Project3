@@ -1,4 +1,4 @@
-import streamlit as st
+﻿import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 import os
@@ -21,6 +21,12 @@ try:
     SUPABASE_AVAILABLE = True
 except ImportError:
     SUPABASE_AVAILABLE = False
+
+# 페이지 설정
+st.set_page_config(
+    page_title="AI 공사관리 에이전트",
+    page_icon="✨",
+)
 
 def parse_cell_address(cell_address):
     """
@@ -182,11 +188,23 @@ def get_previous_day_data(current_date):
         result = supabase_client.table("daily_report_data").select("*").eq("date", previous_date).execute()
         
         if result.data:
+            st.info(f"🔍 전일 데이터 발견: {previous_date}")
             return result.data[0]
+        else:
+            st.info(f"ℹ️ 전일 데이터 없음: {previous_date}")
         return None
         
     except Exception as e:
-        st.error(f"전일 데이터 조회 중 오류: {e}")
+        if "does not exist" in str(e):
+            st.info("ℹ️ 전일 데이터 테이블이 아직 생성되지 않았습니다. 처음 실행하는 것 같습니다.")
+            # 테이블이 없으면 자동으로 생성 시도
+            try:
+                create_daily_report_data_table()
+                st.success("✅ daily_report_data 테이블을 자동으로 생성했습니다.")
+            except Exception as create_error:
+                st.warning(f"⚠️ 테이블 자동 생성 실패: {create_error}")
+        else:
+            st.error(f"전일 데이터 조회 중 오류: {e}")
         return None
 
 def apply_previous_day_data_to_excel(excel_bytes, previous_data):
@@ -252,8 +270,7 @@ def apply_previous_day_data_to_excel(excel_bytes, previous_data):
 
 # --- CONFIG & SETUP ---
 st.set_page_config(
-    page_title="공사일보 자동화",
-    page_icon="🏗️",
+    page_title="작업일보 자동화",
     layout="wide"
 )
 
@@ -272,311 +289,14 @@ WEATHER_API_URL = "https://apis.data.go.kr/1360000/AsosHourlyInfoService/getWthr
 # --- STYLING ---
 st.markdown("""
 <style>
-    /* Import Google Fonts */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+
     
-    /* Global Styles */
-    * {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    }
+
     
-    /* Main App Background - Summer Gradient */
-    .main {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        min-height: 100vh;
-    }
+
     
-    /* Main container with glassmorphism */
-    .main .block-container {
-        background: rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 24px;
-        padding: 2rem 1.5rem 5rem 1.5rem;
-        max-width: 1200px;
-        margin: 1rem auto;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-    }
-    
-    /* Sidebar glassmorphism */
-    [data-testid="stSidebar"] {
-        background: rgba(255, 255, 255, 0.15);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        border-right: 1px solid rgba(255, 255, 255, 0.2);
-    }
-    
-    [data-testid="stSidebar"] h1 {
-        font-size: 1.5rem;
-        color: #ffffff;
-        font-weight: 600;
-        padding: 1rem 0;
-        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    }
-    
-    /* Glassmorphism Cards */
-    .glass-card {
-        background: rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 16px;
-        padding: 1.5rem;
-        margin-bottom: 1.5rem;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-        transition: all 0.3s ease;
-    }
-    
-    .glass-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
-    }
-    
-    /* Section Headers */
-    h1, h2, h3 {
-        color: #1e293b !important;
-        font-weight: 600;
-        text-shadow: none;
-        letter-spacing: -0.02em;
-    }
-    
-    h1 {
-        font-size: 2.5rem !important;
-        color: #0f172a !important;
-        font-weight: 700 !important;
-    }
-    
-    h2 {
-        font-size: 1.75rem !important;
-        color: #1e293b !important;
-        font-weight: 600 !important;
-    }
-    
-    h3 {
-        font-size: 1.25rem !important;
-        color: #334155 !important;
-        font-weight: 500 !important;
-    }
-    
-    /* Text Areas with glassmorphism */
-    .stTextArea textarea {
-        background: rgba(255, 255, 255, 0.9) !important;
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        border: 1px solid rgba(0, 0, 0, 0.1) !important;
-        border-radius: 12px !important;
-        color: #1e293b !important;
-        font-size: 14px;
-        padding: 12px !important;
-        font-weight: 400;
-    }
-    
-    .stTextArea textarea::placeholder {
-        color: rgba(30, 41, 59, 0.6) !important;
-    }
-    
-    /* General text styling */
-    p, div, span {
-        color: #334155 !important;
-        line-height: 1.6;
-    }
-    
-    /* Strong text */
-    strong, b {
-        color: #1e293b !important;
-        font-weight: 600;
-    }
-    
-    /* Buttons with glassmorphism */
-    .stButton > button {
-        background: rgba(255, 255, 255, 0.9) !important;
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        border: 1px solid rgba(0, 0, 0, 0.1) !important;
-        border-radius: 12px !important;
-        color: #1e293b !important;
-        font-weight: 500 !important;
-        padding: 10px 20px !important;
-        transition: all 0.3s ease !important;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1) !important;
-        font-size: 14px;
-    }
-    
-    .stButton > button:hover {
-        background: rgba(255, 255, 255, 1) !important;
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15) !important;
-        color: #0f172a !important;
-    }
-    
-    /* Primary Button */
-    .stButton > button,
-    button[data-baseweb="button"] {
-        background: linear-gradient(135deg, #788CE6 0%, #7850B4 100%) !important;
-        border: none !important;
-        color: #ffffff !important;
-        font-weight: 600 !important;
-        box-shadow: 0 4px 20px rgba(120, 140, 230, 0.4) !important;
-    }
-    
-    .stButton > button:hover,
-    button[data-baseweb="button"]:hover {
-        background: linear-gradient(135deg, #6B7FD8 0%, #6B46C1 100%) !important;
-        transform: translateY(-2px);
-        box-shadow: 0 8px 30px rgba(120, 140, 230, 0.5) !important;
-        color: #ffffff !important;
-    }
-    
-    /* 강제로 모든 버튼 텍스트를 흰색으로 설정 */
-    .stButton > button *,
-    button[data-baseweb="button"] * {
-        color: #ffffff !important;
-    }
-    
-    /* 버튼 내부의 모든 텍스트 요소 */
-    .stButton > button span,
-    button[data-baseweb="button"] span,
-    .stButton > button div,
-    button[data-baseweb="button"] div {
-        color: #ffffff !important;
-    }
-    
-    /* 모든 버튼을 AI 자동채우기와 같은 스타일로 통일 */
-    .stButton > button {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-        border: none !important;
-        color: white !important;
-        font-weight: 600 !important;
-        border-radius: 12px !important;
-        padding: 8px 16px !important;
-        transition: all 0.3s ease !important;
-        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4) !important;
-    }
-    
-    .stButton > button:hover {
-        background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%) !important;
-        transform: translateY(-2px) !important;
-        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6) !important;
-    }
-    
-    /* 프롬프트 관리 섹션의 버튼만 기본 스타일 적용 */
-    .stExpander .stButton > button {
-        background: #f0f2f6 !important;
-        border: 1px solid #d0d7de !important;
-        color: #000000 !important;
-        font-weight: 500 !important;
-        border-radius: 6px !important;
-        padding: 6px 12px !important;
-        transition: none !important;
-        box-shadow: none !important;
-    }
-    
-    .stExpander .stButton > button:hover {
-        background: #f6f8fa !important;
-        border-color: #0969da !important;
-        color: #0969da !important;
-        transform: none !important;
-        box-shadow: none !important;
-    }
-    
-    /* 프롬프트 관리 섹션의 모든 버튼 텍스트를 강제로 검은색으로 설정 */
-    .stExpander button {
-        color: #000000 !important;
-    }
-    
-    .stExpander button:hover {
-        color: #0969da !important;
-    }
-    
-    /* 모든 버튼 텍스트를 강제로 검은색으로 설정 */
-    button {
-        color: #000000 !important;
-    }
-    
-    button:hover {
-        color: #0969da !important;
-    }
-    
-    /* 프롬프트 관리 섹션의 모든 요소를 검은색으로 설정 */
-    .stExpander * {
-        color: #000000 !important;
-    }
-    
-    /* 모든 버튼 내부 텍스트를 강제로 검은색으로 설정 */
-    .stButton > button {
-        color: #000000 !important;
-    }
-    
-    .stButton > button:hover {
-        color: #0969da !important;
-    }
-    
-    /* 모든 버튼 요소의 텍스트를 강제로 검은색으로 설정 */
-    button span, button div, button p {
-        color: #000000 !important;
-    }
-    
-    /* Streamlit 버튼의 모든 텍스트를 강제로 검은색으로 설정 */
-    [data-testid="stButton"] button {
-        color: #000000 !important;
-    }
-    
-    /* 모든 텍스트를 강제로 검은색으로 설정 */
-    * {
-        color: #000000 !important;
-    }
-    
-    /* 버튼 내부의 모든 텍스트를 강제로 검은색으로 설정 */
-    button * {
-        color: #000000 !important;
-    }
-    
-    /* 프롬프트 관리 섹션의 모든 버튼 텍스트를 강제로 검은색으로 설정 */
-    .stExpander button * {
-        color: #000000 !important;
-    }
-    
-    /* 모든 Streamlit 버튼의 텍스트를 강제로 검은색으로 설정 */
-    .stButton * {
-        color: #000000 !important;
-    }
-    
-    /* 모든 버튼의 텍스트를 강제로 검은색으로 설정 */
-    button, button *, .stButton, .stButton * {
-        color: #000000 !important;
-    }
-    
-    /* 프롬프트 관리 섹션의 모든 요소를 검은색으로 설정 */
-    .stExpander, .stExpander * {
-        color: #000000 !important;
-    }
-    
-    /* 모든 Streamlit 컴포넌트의 텍스트를 검은색으로 설정 */
-    [data-testid], [data-testid] * {
-        color: #000000 !important;
-    }
-    
-    /* 프롬프트 관리 섹션의 텍스트 색상을 검은색으로 설정 */
-    .stExpander {
-        color: #000000 !important;
-    }
-    
-    .stExpander .stMarkdown {
-        color: #000000 !important;
-    }
-    
-    .stExpander .stTextInput > div > div > input {
-        color: #000000 !important;
-    }
-    
-    .stExpander .stTextArea > div > div > textarea {
-        color: #000000 !important;
-    }
-    
-    .stExpander .stSelectbox > div > div {
-        color: #000000 !important;
-    }
+
     
     /* File Uploader */
     .stFileUploader {
@@ -816,60 +536,7 @@ st.markdown("""
         border-color: rgba(255, 255, 255, 0.1) !important;
     }
     
-    /* Step styling for sidebar */
-    .step {
-        display: flex;
-        align-items: center;
-        margin-bottom: 1rem;
-        padding: 1rem;
-        border-radius: 12px;
-        transition: all 0.3s ease;
-        background: rgba(255, 255, 255, 0.9);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        border: 1px solid rgba(0, 0, 0, 0.1);
-        color: #1e293b;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    }
     
-    .step.active {
-        background: rgba(59, 130, 246, 0.1);
-        border-color: rgba(59, 130, 246, 0.3);
-        transform: translateX(4px);
-        box-shadow: 0 4px 16px rgba(59, 130, 246, 0.2);
-    }
-    
-    .step.completed {
-        background: rgba(34, 197, 94, 0.1);
-        border-color: rgba(34, 197, 94, 0.3);
-        box-shadow: 0 2px 8px rgba(34, 197, 94, 0.2);
-    }
-    
-    .step-icon {
-        font-size: 1.25rem;
-        margin-right: 0.75rem;
-        min-width: 1.5rem;
-        text-align: center;
-        color: #1e293b;
-    }
-    
-    .step-text {
-        font-size: 0.9rem;
-        font-weight: 500;
-        color: #1e293b;
-        flex: 1;
-        line-height: 1.4;
-    }
-    
-    .step.completed .step-text {
-        color: #166534;
-        font-weight: 600;
-    }
-    
-    .step.active .step-text {
-        color: #1e40af;
-        font-weight: 600;
-    }
     
     /* Card styling */
     .card {
@@ -1124,7 +791,6 @@ def init_supabase():
         try:
             # 간단한 쿼리로 연결 확인
             test_result = client.table("daily_report_data").select("count", count="exact").execute()
-            st.success("✅ Supabase 연결 성공!")
             return client
         except Exception as test_error:
             st.warning(f"⚠️ Supabase 연결 테스트 실패: {test_error}")
@@ -1326,7 +992,7 @@ DEFAULT_PROMPT = """
 
 # --- PROMPT MANAGEMENT FUNCTIONS ---
 def save_prompt_to_supabase(prompt_name, prompt_content, description=""):
-    """프롬프트를 Supabase에 저장합니다."""
+    """프롬프트를 Database에 저장합니다."""
     global supabase_client
     if not supabase_client:
         st.warning("⚠️ Supabase 연결이 설정되지 않았습니다.")
@@ -1823,7 +1489,7 @@ def save_step1_to_supabase(data, date=None):
         return False
 
 def save_to_supabase(data_type, data, date=None):
-    """데이터를 Supabase에 저장합니다."""
+    """데이터를 Database에 저장합니다."""
     global supabase_client
     
     if not supabase_client:
@@ -1836,20 +1502,17 @@ def save_to_supabase(data_type, data, date=None):
         # 데이터 타입에 따라 다른 테이블에 저장
         if data_type == "daily_report":
             try:
-                # 엑셀 파일에서 특정 셀 데이터 추출
-                if "excel_bytes" in data:
-                    extracted_data = extract_cell_data_from_excel(data["excel_bytes"], current_date)
-                    
-                    if not extracted_data:
-                        st.error("❌ 엑셀 데이터 추출에 실패했습니다.")
-                        return False
-                    
+                # 직접 데이터를 저장 (엑셀 파일 추출 없이)
+                if "시공현황" in data and "인원" in data and "장비" in data:
                     # daily_report_data 테이블에 저장
                     report_data = {
                         "date": current_date,
-                        "construction_data": extracted_data.get("construction_data", {}),
-                        "personnel_data": extracted_data.get("personnel_data", {}),
-                        "equipment_data": extracted_data.get("equipment_data", {}),
+                        "construction_data": data.get("시공현황", {}),
+                        "personnel_data": data.get("인원", {}),
+                        "equipment_data": data.get("장비", {}),
+                        "work_content": data.get("작업내용", {}),
+                        "basic_info": data.get("기본정보", {}),
+                        "excel_bytes": data.get("excel_bytes", None),
                         "created_at": datetime.now().isoformat(),
                         "updated_at": datetime.now().isoformat()
                     }
@@ -1871,56 +1534,20 @@ def save_to_supabase(data_type, data, date=None):
                         
                     except Exception as table_error:
                         st.error(f"❌ Supabase 저장 실패: {table_error}")
+                        st.error(f"❌ 상세 오류: {str(table_error)}")
                         return False
                     
                 else:
-                    st.error("❌ 엑셀 파일 데이터가 없습니다.")
+                    st.error("❌ 필요한 데이터가 없습니다. 시공현황, 인원, 장비 데이터가 필요합니다.")
+                    st.error(f"❌ 전달된 데이터 키: {list(data.keys())}")
                     return False
                 
             except Exception as e:
                 st.error(f"❌ 데이터 저장 실패: {e}")
+                st.error(f"❌ 상세 오류: {str(e)}")
                 return False
             
-        elif data_type == "blast_data":
-            # 발파 데이터
-            blast_records = []
-            for _, row in data.iterrows():
-                blast_records.append({
-                    "date": current_date,
-                    "blast_date": row.get("발파일자", ""),
-                    "blast_time": row.get("발파시간", ""),
-                    "min_charge": row.get("지발당장약량(최소, kg)", ""),
-                    "max_charge": row.get("지발당장약량(최대, kg)", ""),
-                    "explosive_usage": row.get("폭약사용량(kg)", ""),
-                    "vibration": row.get("발파진동(cm/sec)", ""),
-                    "noise": row.get("발파소음(dB(A))", ""),
-                    "measurement_location": row.get("계측위치", ""),
-                    "remarks": row.get("비고", ""),
-                    "created_at": datetime.now().isoformat()
-                })
-            
-            result = supabase_client.table("blast_data").insert(blast_records).execute()
-            st.success("✅ 발파 데이터 저장 완료")
-            
-        elif data_type == "instrument_data":
-            # 계측기 데이터
-            instrument_records = []
-            for _, row in data.iterrows():
-                instrument_records.append({
-                    "date": current_date,
-                    "location": row.get("위치", ""),
-                    "instrument_type": row.get("계측기 종류", ""),
-                    "instrument_name": row.get("계측기명", ""),
-                    "weekly_change": row.get("주간변화량", ""),
-                    "cumulative_change": row.get("누적변화량", ""),
-                    "unit": row.get("단위", ""),
-                    "status": row.get("상태", ""),
-                    "ratio": row.get("비율", ""),
-                    "created_at": datetime.now().isoformat()
-                })
-            
-            result = supabase_client.table("instrument_data").insert(instrument_records).execute()
-            st.success("✅ 계측기 데이터가 Supabase에 저장되었습니다.")
+        
             
         return True
         
@@ -1957,7 +1584,7 @@ def load_from_supabase(data_type, date=None):
         return None
 
 def save_template_to_supabase(template_bytes, template_name="default", description=""):
-    """엑셀 템플릿을 Supabase에 저장"""
+    """엑셀 템플릿을 Database에 저장"""
     global supabase_client
     if not supabase_client:
         st.warning("⚠️ Supabase 연결이 설정되지 않았습니다.")
@@ -2126,7 +1753,7 @@ def create_daily_report_data_table():
             return False, f"테이블 생성 실패: {str(e)}"
 
 def save_cell_mapping_to_supabase(mapping_data, mapping_name="default"):
-    """셀 매핑 설정을 Supabase에 저장"""
+    """셀 매핑 설정을 Database에 저장"""
     global supabase_client
     if not supabase_client:
         return False, "Supabase 연결 실패"
@@ -2232,7 +1859,6 @@ def parse_tsv_to_dataframe(tsv_content):
             if '누계' in col or '변화량' in col or any(x in col for x in ['명', '대', 'kg', 'cm/sec', 'dB']):
                 df[col] = df[col].replace('', '0')
         
-        st.info(f"✅ TSV 파싱 성공: {len(df)}행, {len(df.columns)}열")
         return df
         
     except Exception as e:
@@ -2971,44 +2597,50 @@ def insert_data_to_excel_with_mapping(template_bytes, basic_info, tables_data, c
         # 전일 데이터 적용 (previous_data가 있는 경우)
         if previous_data:
             try:
+                st.info(f"🔍 전일 데이터 구조: {list(previous_data.keys())}")
+                
                 # 1. 시공현황 전일 데이터 적용 (T11~43 누계 → N11~43 전일까지)
-                construction_data = previous_data.get("construction_data", {})
-                row = 11
-                for category, data in construction_data.items():
-                    if row <= 43:
-                        cumulative_value = data.get("누계", 0)
-                        worksheet[f"N{row}"] = cumulative_value
-                        row += 1
+                construction_data = previous_data.get("시공현황", [])
+                if construction_data:
+                    row = 11
+                    for item in construction_data:
+                        if row <= 43 and isinstance(item, dict):
+                            cumulative_value = item.get("누계", 0)
+                            worksheet[f"N{row}"] = cumulative_value
+                            row += 1
+                    st.info(f"✅ 시공현황 전일 데이터 적용 완료: {row-11}행")
                 
                 # 2. 인원 전일 데이터 적용 (L66~87, Y66~87)
-                personnel_data = previous_data.get("personnel_data", {})
-                row = 66
-                for category, data in personnel_data.items():
-                    if row <= 87:
-                        previous_value = data.get("전일까지", 0)
-                        cumulative_value = data.get("누계", 0)
-                        worksheet[f"L{row}"] = previous_value
-                        worksheet[f"Y{row}"] = cumulative_value
-                        row += 1
+                personnel_data = previous_data.get("인원", [])
+                if personnel_data:
+                    row = 66
+                    for item in personnel_data:
+                        if row <= 87 and isinstance(item, dict):
+                            previous_value = item.get("전일까지", 0)
+                            cumulative_value = item.get("누계", 0)
+                            worksheet[f"L{row}"] = previous_value
+                            worksheet[f"Y{row}"] = cumulative_value
+                            row += 1
+                    st.info(f"✅ 인원 전일 데이터 적용 완료: {row-66}행")
                 
                 # 3. 장비 전일 데이터 적용 (L91~119, Y91~119)
-                equipment_data = previous_data.get("equipment_data", {})
-                row = 91
-                for category, data in equipment_data.items():
-                    if row <= 119:
-                        previous_value = data.get("전일까지", 0)
-                        cumulative_value = data.get("누계", 0)
-                        worksheet[f"L{row}"] = previous_value
-                        worksheet[f"Y{row}"] = cumulative_value
-                        row += 1
+                equipment_data = previous_data.get("장비", [])
+                if equipment_data:
+                    row = 91
+                    for item in equipment_data:
+                        if row <= 119 and isinstance(item, dict):
+                            previous_value = item.get("전일까지", 0)
+                            cumulative_value = item.get("누계", 0)
+                            worksheet[f"L{row}"] = previous_value
+                            worksheet[f"Y{row}"] = cumulative_value
+                            row += 1
+                    st.info(f"✅ 장비 전일 데이터 적용 완료: {row-91}행")
                 
                 st.success("✅ 전일 데이터가 자동으로 적용되었습니다!")
                 
             except Exception as e:
                 st.warning(f"⚠️ 전일 데이터 적용 중 오류: {e}")
-        else:
-            st.info("ℹ️ 전일 데이터가 없어 새로 시작합니다.")
-        
+                st.error(f"전일 데이터 구조: {previous_data}")
         # 테이블 데이터 삽입 (전체 테이블 삽입)
         if tables_data:
             # 사용자 입력값을 기반으로 테이블 위치 계산
@@ -3184,63 +2816,94 @@ def initialize_session_state():
 initialize_session_state()
 
 
-# --- SIDEBAR ---
-with st.sidebar:
-    st.markdown("<h1>🏗️ 공사일보 자동화</h1>", unsafe_allow_html=True)
-    
-    if st.button("모든 작업 초기화", key="reset_all"):
-        for key in list(st.session_state.keys()): del st.session_state[key]
-        st.rerun()
+# 사이드바 비활성화 (다른 페이지와 동일하게)
 
-    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-
-    steps = [
-        ("SNS일작업보고 입력", "kakao_work_completed", "📝"),
-        ("기본정보 입력", "basic_info_completed", "📋"),
-        ("작업일보 생성", "excel_export_completed", "📊")
-    ]
-    
-    current_step_index = 0
-    if st.session_state.basic_info_completed: current_step_index = 1
-    if st.session_state.excel_export_completed: current_step_index = 2
-
-    for i, (text, state_key, icon) in enumerate(steps):
-        is_completed = st.session_state.get(state_key, False)
-        is_active = (i == current_step_index)
-        status_class = "completed" if is_completed else "active" if is_active else ""
-        step_icon = "✅" if is_completed else icon
-        
-        st.markdown(f'<div class="step {status_class}"><div class="step-icon">{step_icon}</div><div class="step-text"><strong>{i+1}.</strong> {text}</div></div>', unsafe_allow_html=True)
-
-    st.markdown('</div>', unsafe_allow_html=True)
-
-
-# --- SIDEBAR NAVIGATION ---
-st.sidebar.markdown("## 🧭 네비게이션")
-page = st.sidebar.selectbox(
-    "페이지 선택",
-    ["🏗️ 메인", "📝 AI 일일작업보고", "💥 발파데이터 자동화", "🤖 AI 챗봇"],
-    index=0
-)
-
-# 페이지별 네비게이션
-if page == "📝 AI 일일작업보고":
-    st.switch_page("pages/1_AI_일일작업보고_생성기.py")
-elif page == "💥 발파데이터 자동화":
-    st.switch_page("pages/2_발파데이터_자동화계측기.py")
-elif page == "🤖 AI 챗봇":
-    st.switch_page("pages/3_AI_챗봇.py")
-
-# --- MAIN CONTENT ---
+# 공통 사이드바 스타일 추가
 st.markdown("""
-<div style="text-align: center; padding: 20px 0;">
-    <h1 style="margin: 0; font-size: 2.5rem; font-weight: bold; color: #1E3A8A;">🏗️ 공사일보 자동화 시스템</h1>
-</div>
+<style>
+    /* 사이드바 공통 스타일 */
+    [data-testid="stSidebar"] {
+        background-color: #F8F9FA;
+        border-right: 1px solid #E5E7EB;
+    }
+    [data-testid="stSidebar"] h1 {
+        font-size: 1.5rem;
+        color: #1E3A8A;
+        font-weight: 700;
+        padding: 1rem 0;
+    }
+    /* 메인 폰트 (아이콘 충돌 방지를 위해 [class*="st-"] 선택자 제거) */
+    html, body, .stTextArea, .stButton>button, .stFileUploader, .stSelectbox {
+        font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    }
+    /* 메인 컨테이너 */
+    .main .block-container {
+        padding: 2rem 2rem 5rem 2rem;
+        max-width: 1000px;
+    }
+    
+    /* PRIMARY 버튼 모던한 색상 스타일 */
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+        transition: all 0.3s ease !important;
+        padding: 8px 16px !important;
+        font-size: 14px !important;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3) !important;
+    }
+    
+    .stButton > button[kind="primary"]:hover {
+        background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%) !important;
+        transform: translateY(-2px) !important;
+        box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4) !important;
+    }
+    
+    .stButton > button[kind="primary"]:active {
+        transform: translateY(0) !important;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3) !important;
+    }
+</style>
 """, unsafe_allow_html=True)
+
+st.title("📄작업일보 작성 자동화")
+st.write("SNS 일일작업계획보고를 입력하시면 AI가 자동으로 작업일보를 생성해드립니다.")
+st.markdown("---")
 
 # --- STEP 1: SNS WORK REPORT INPUT ---
 with st.container():
-    st.markdown('<h3><span style="font-size: 1.5em;">📝</span> 1. SNS일작업보고 입력</h3>', unsafe_allow_html=True)
+    st.markdown('<h3><span style="font-size: 1.5em;">📱</span> 1. SNS 일일작업계획보고 입력</h3>', unsafe_allow_html=True)
+    
+    # 전달된 보고서 내용 표시
+    if 'report_to_transfer' in st.session_state and st.session_state.report_to_transfer:
+        st.markdown("---")
+        st.markdown('<h4><span style="font-size: 1.2em;">📋</span> 전달된 일일작업보고</h4>', unsafe_allow_html=True)
+        
+        with st.container(border=True):
+            st.markdown("**SNS일일작업계획 페이지에서 전달된 보고서 내용:**")
+            st.text_area(
+                "보고서 내용",
+                value=st.session_state.report_to_transfer,
+                height=300,
+                key="transferred_report_display",
+                label_visibility="collapsed"
+            )
+            
+            col1, col2 = st.columns([1, 1])
+            with col1:
+                if st.button("📋 이 내용으로 작업일보 생성", key="use_transferred_report", use_container_width=True):
+                    # 전달된 내용을 현재 프롬프트에 설정
+                    st.session_state.current_report_content = st.session_state.report_to_transfer
+                    st.toast("✅ 전달된 보고서 내용이 설정되었습니다!")
+                    st.rerun()
+            
+            with col2:
+                if st.button("🗑️ 전달된 내용 삭제", key="clear_transferred_report", use_container_width=True):
+                    del st.session_state.report_to_transfer
+                    st.toast("🗑️ 전달된 보고서 내용이 삭제되었습니다!")
+                    st.rerun()
     
     # 프롬프트 관리 섹션
     with st.expander("⚙️ 프롬프트 관리", expanded=False):
@@ -3254,7 +2917,8 @@ with st.container():
                 selected_prompt = st.selectbox(
                     "저장된 프롬프트 선택",
                     options=prompt_options,
-                    index=prompt_options.index(st.session_state.current_prompt_name) if st.session_state.current_prompt_name in prompt_options else 0
+                    index=prompt_options.index(st.session_state.current_prompt_name) if st.session_state.current_prompt_name in prompt_options else 0,
+                    label_visibility="collapsed"
                 )
                 
                 if selected_prompt != st.session_state.current_prompt_name:
@@ -3495,36 +3159,24 @@ with st.container():
 
     
     if not st.session_state.kakao_work_completed:
-        kakao_text = st.text_area("카카오톡 작업보고", placeholder="이곳에 카카오톡 작업보고 내용을 붙여넣으세요...", height=200, label_visibility="collapsed")
+        kakao_text = st.text_area("카카오톡 작업보고", placeholder=" 이곳에 SNS일일작업계획보고를 붙여넣으세요.", height=200, label_visibility="collapsed")
         
         # AI 데이터 추출 버튼만 배치
-        if st.button("✨AI 데이터 추출", key="structure_button", use_container_width=True):
+        if st.button("🪄AI 데이터 추출", key="structure_button", use_container_width=True, type="primary"):
             if kakao_text:
                 # 진행 상황을 단계별로 표시
                 progress_placeholder = st.empty()
                 status_placeholder = st.empty()
                 
                 try:
-                    # 1단계: 프롬프트 준비
-                    progress_placeholder.progress(0, text="📝 프롬프트 준비 중...")
-                    prompt = st.session_state.prompt + "\n" + kakao_text
-                    
-                    # 2단계: AI 모델 호출
-                    progress_placeholder.progress(30, text="🤖 AI 모델에 요청 중...")
-                    status_placeholder.info("AI가 데이터를 추출하고 있습니다. 잠시만 기다려주세요...")
-                    
-                    response_text = safe_generate_content(prompt)
+                    # 기본 로딩 스피너
+                    with st.spinner("AI가 데이터를 추출하고 있습니다. 잠시만 기다려주세요..."):
+                        prompt = st.session_state.prompt + "\n" + kakao_text
+                        response_text = safe_generate_content(prompt)
                     
                     if response_text:
-                        # 3단계: 응답 처리
-                        progress_placeholder.progress(70, text="📊 응답 데이터 처리 중...")
-                        
                         # AI 응답에서 작업 날짜 추출
                         work_date = extract_work_date_from_response(response_text)
-                        
-                        # 4단계: 완료
-                        progress_placeholder.progress(100, text="✅ 완료!")
-                        status_placeholder.success("🎉 AI 데이터 추출이 완료되었습니다!")
                         
                         st.session_state.kakao_results = response_text
                         st.session_state.work_date = work_date  # 추출된 작업 날짜 저장
@@ -3532,21 +3184,13 @@ with st.container():
                         
                         st.info(f"📅 추출된 작업 날짜: {work_date}")
                         st.toast("✅ 1단계 완료: SNS 작업보고 데이터 구조화 성공!")
-                        st.success("✅ 1단계 완료: SNS 작업보고가 성공적으로 처리되었습니다.")
-                        
-                        # 진행 상황 표시 제거
-                        progress_placeholder.empty()
-                        status_placeholder.empty()
+                        st.success("✅ 1단계 완료: SNS 일일작업계획보고를 성공적으로 처리했습니다.")
                         
                         # 페이지 새로고침하여 처리된 데이터 보기 표시
                         st.rerun()
                     else:
-                        progress_placeholder.empty()
-                        status_placeholder.empty()
                         st.error("❌ AI 응답 생성에 실패했습니다.")
                 except Exception as e: 
-                    progress_placeholder.empty()
-                    status_placeholder.empty()
                     st.error(f"❌ AI 데이터 추출 중 오류: {e}")
                     st.error("💡 네트워크 연결을 확인하거나 잠시 후 다시 시도해주세요.")
             else: 
@@ -3580,67 +3224,125 @@ with st.container():
             
             # 2. TSV 블록이 없으면 섹션별로 추출 시도
             if not tsv_blocks:
-                # 시공현황 섹션 찾기
-                construction_match = re.search(r'## 1\. 시공현황.*?(?=## 2\.|$)', response_text, re.DOTALL | re.IGNORECASE)
-                if construction_match:
-                    construction_text = construction_match.group(0)
-                    # 시공현황에서 테이블 형태 데이터 추출
-                    lines = construction_text.split('\n')
-                    table_data = []
-                    for line in lines:
-                        if line.strip() and not line.startswith('##') and not line.startswith('#'):
-                            # 숫자가 포함된 라인을 테이블 데이터로 간주
-                            if re.search(r'\d+', line):
-                                parts = line.split()
-                                if len(parts) >= 2:
-                                    table_data.append('\t'.join(parts))
-                    if table_data:
-                        table_sections["시공현황"] = '\n'.join(table_data)
+                # 시공현황 섹션 찾기 (더 유연한 검색)
+                construction_patterns = [
+                    r'## 1\. 시공현황.*?(?=## 2\.|$)',
+                    r'시공현황.*?(?=##|$)',
+                    r'시공현황.*?(?=\n\n|$)'
+                ]
                 
-                # 작업내용 섹션 찾기
-                work_match = re.search(r'## 2\. 작업내용.*?(?=## 3\.|$)', response_text, re.DOTALL | re.IGNORECASE)
-                if work_match:
-                    work_text = work_match.group(0)
-                    lines = work_text.split('\n')
-                    table_data = []
-                    for line in lines:
-                        if line.strip() and not line.startswith('##') and not line.startswith('#'):
-                            if re.search(r'\d+', line):
-                                parts = line.split()
-                                if len(parts) >= 2:
-                                    table_data.append('\t'.join(parts))
-                    if table_data:
-                        table_sections["작업내용"] = '\n'.join(table_data)
+                construction_found = False
+                for pattern in construction_patterns:
+                    construction_match = re.search(pattern, response_text, re.DOTALL | re.IGNORECASE)
+                    if construction_match:
+                        construction_text = construction_match.group(0)
+                        lines = construction_text.split('\n')
+                        table_data = []
+                        for line in lines:
+                            line = line.strip()
+                            if line and not line.startswith('##') and not line.startswith('#'):
+                                if re.search(r'\d+', line):
+                                    parts = line.split()
+                                    if len(parts) >= 2:
+                                        table_data.append('\t'.join(parts))
+                        if table_data:
+                            table_sections["시공현황"] = '\n'.join(table_data)
+                            construction_found = True
+                            break
                 
-                # 인원 섹션 찾기
-                personnel_match = re.search(r'## 3\. 인원.*?(?=## 4\.|$)', response_text, re.DOTALL | re.IGNORECASE)
-                if personnel_match:
-                    personnel_text = personnel_match.group(0)
-                    lines = personnel_text.split('\n')
-                    table_data = []
-                    for line in lines:
-                        if line.strip() and not line.startswith('##') and not line.startswith('#'):
-                            if re.search(r'\d+', line):
-                                parts = line.split()
-                                if len(parts) >= 2:
-                                    table_data.append('\t'.join(parts))
-                    if table_data:
-                        table_sections["인원"] = '\n'.join(table_data)
+                # 작업내용 섹션 찾기 (더 유연한 검색)
+                work_patterns = [
+                    r'## 2\. 작업내용.*?(?=## 3\.|$)',
+                    r'작업내용.*?(?=##|$)',
+                    r'작업내용.*?(?=\n\n|$)'
+                ]
                 
-                # 장비 섹션 찾기
-                equipment_match = re.search(r'## 4\. 장비.*?(?=##|$)', response_text, re.DOTALL | re.IGNORECASE)
-                if equipment_match:
-                    equipment_text = equipment_match.group(0)
-                    lines = equipment_text.split('\n')
-                    table_data = []
-                    for line in lines:
-                        if line.strip() and not line.startswith('##') and not line.startswith('#'):
-                            if re.search(r'\d+', line):
-                                parts = line.split()
-                                if len(parts) >= 2:
-                                    table_data.append('\t'.join(parts))
-                    if table_data:
-                        table_sections["장비"] = '\n'.join(table_data)
+                work_found = False
+                for pattern in work_patterns:
+                    work_match = re.search(pattern, response_text, re.DOTALL | re.IGNORECASE)
+                    if work_match:
+                        work_text = work_match.group(0)
+                        lines = work_text.split('\n')
+                        table_data = []
+                        for line in lines:
+                            line = line.strip()
+                            if line and not line.startswith('##') and not line.startswith('#'):
+                                if re.search(r'\d+', line):
+                                    parts = line.split()
+                                    if len(parts) >= 2:
+                                        table_data.append('\t'.join(parts))
+                        if table_data:
+                            table_sections["작업내용"] = '\n'.join(table_data)
+                            work_found = True
+                            break
+                
+                # 인원 섹션 찾기 (더 유연한 검색)
+                personnel_patterns = [
+                    r'## 3\. 인원.*?(?=## 4\.|$)',
+                    r'인원.*?(?=##|$)',
+                    r'인원.*?(?=\n\n|$)'
+                ]
+                
+                personnel_found = False
+                for pattern in personnel_patterns:
+                    personnel_match = re.search(pattern, response_text, re.DOTALL | re.IGNORECASE)
+                    if personnel_match:
+                        personnel_text = personnel_match.group(0)
+                        lines = personnel_text.split('\n')
+                        table_data = []
+                        for line in lines:
+                            line = line.strip()
+                            if line and not line.startswith('##') and not line.startswith('#'):
+                                if re.search(r'\d+', line):
+                                    parts = line.split()
+                                    if len(parts) >= 2:
+                                        table_data.append('\t'.join(parts))
+                        if table_data:
+                            table_sections["인원"] = '\n'.join(table_data)
+                            personnel_found = True
+                            break
+                
+                # 장비 섹션 찾기 (더 유연한 검색)
+                equipment_patterns = [
+                    r'## 4\. 장비.*?(?=##|$)',
+                    r'장비.*?(?=##|$)',
+                    r'장비.*?(?=\n\n|$)',
+                    r'장비.*?(?=안전관리|$)'
+                ]
+                
+                equipment_found = False
+                for pattern in equipment_patterns:
+                    equipment_match = re.search(pattern, response_text, re.DOTALL | re.IGNORECASE)
+                    if equipment_match:
+                        equipment_text = equipment_match.group(0)
+                        lines = equipment_text.split('\n')
+                        table_data = []
+                        for line in lines:
+                            line = line.strip()
+                            if line and not line.startswith('##') and not line.startswith('#'):
+                                # 숫자가 포함된 라인을 테이블 데이터로 간주
+                                if re.search(r'\d+', line):
+                                    parts = line.split()
+                                    if len(parts) >= 2:
+                                        table_data.append('\t'.join(parts))
+                        if table_data:
+                            table_sections["장비"] = '\n'.join(table_data)
+                            equipment_found = True
+                            break
+                
+                # 장비 섹션을 찾지 못했다면 디버깅 정보 표시
+                if not equipment_found:
+                    st.info("🔍 장비 섹션 검색 패턴:")
+                    for i, pattern in enumerate(equipment_patterns):
+                        st.text(f"패턴 {i+1}: {pattern}")
+                    st.info("🔍 AI 응답에서 '장비' 키워드 위치:")
+                    equipment_keyword_pos = response_text.lower().find('장비')
+                    if equipment_keyword_pos != -1:
+                        start = max(0, equipment_keyword_pos - 100)
+                        end = min(len(response_text), equipment_keyword_pos + 200)
+                        st.code(response_text[start:end])
+                    else:
+                        st.warning("⚠️ AI 응답에서 '장비' 키워드를 찾을 수 없습니다.")
             else:
                 # TSV 블록이 있으면 기존 방식으로 처리
                 table_names = ["시공현황", "작업내용", "인원", "장비"]
@@ -3671,14 +3373,15 @@ with st.container():
             
             st.session_state.processed_tables = processed_tables
             
-            # Supabase 저장 기능 (항상 표시)
+                        # Supabase 저장 기능 (항상 표시)
             st.markdown("---")
             st.markdown("### 💾 데이터 저장")
             
-            col1, col2 = st.columns([1, 1])
+            # 두 버튼을 한 줄에 배치
+            col1, col2 = st.columns(2)
             
             with col1:
-                if st.button("💾 Supabase에 저장", key="save_step1", use_container_width=True):
+                if st.button("💾 Database에 저장", key="save_step1"):
                     # 데이터를 딕셔너리로 변환하여 저장
                     report_data = {}
                     for table_name, tsv_data in table_sections.items():
@@ -3692,7 +3395,6 @@ with st.container():
                         work_date = st.session_state.get('work_date', datetime.now().strftime('%Y-%m-%d'))
                         if save_step1_to_supabase(report_data, work_date):
                             st.session_state.daily_report_saved = True
-                            st.success("✅ 1단계 데이터가 4개 테이블에 저장되었습니다!")
                             st.info("💡 시공현황, 작업내용, 인원, 장비 데이터가 각각 별도 테이블에 저장되었습니다.")
                         else:
                             st.error("❌ 1단계 데이터 저장에 실패했습니다.")
@@ -3700,13 +3402,16 @@ with st.container():
                         st.warning("⚠️ 저장할 데이터가 없습니다.")
             
             with col2:
-                if st.button("📅 날짜별 데이터 조회", key="load_step1", use_container_width=True):
+                if st.button("📅 날짜별 데이터 조회", key="load_step1"):
                     selected_date = st.date_input("조회할 날짜 선택", value=datetime.now(), key="load_date_step1")
                     loaded_data = load_from_supabase("daily_report", selected_date.strftime('%Y-%m-%d'))
                     if loaded_data:
                         st.json(loaded_data)
                     else:
                         st.info("해당 날짜의 데이터가 없습니다.")
+
+# --- STEP 1과 STEP 2 구분선 ---
+st.markdown("---")
 
 # --- STEP 2: BASIC INFO INPUT ---
 with st.container():
@@ -3755,7 +3460,7 @@ with st.container():
         
         # 날씨 상태 표시
         if weather_auto_fill:
-            st.info(f"🌤️ 현재 날씨: 최고 {weather_auto_fill.get('max_temp', 0):.1f}°C / 최저 {weather_auto_fill.get('min_temp', 0):.1f}°C / 강수량 {weather_auto_fill.get('precipitation', 0):.1f}mm")
+            st.info(f"🌤️ 날씨: 최고 {weather_auto_fill.get('max_temp', 0):.1f}°C / 최저 {weather_auto_fill.get('min_temp', 0):.1f}°C / 강수량 {weather_auto_fill.get('precipitation', 0):.1f}mm")
         
         # AI 자동채우기 버튼 (제일 왼쪽, 작은 버튼)
         if st.button("🪄AI 자동채우기", key="weather_auto_fill_button", help="AI 자동채우기"):
@@ -3780,9 +3485,12 @@ with st.container():
         with progress_col2:
             actual_progress = st.number_input("실적 (%)", value=48.5, key="excel_actual_progress")
 
+# --- STEP 2와 STEP 3 구분선 ---
+st.markdown("---")
+
 # --- STEP 3: WORK REPORT GENERATION ---
 with st.container():
-    st.markdown('<h3><span style="font-size: 1.5em;">📊</span> 3. 작업일보 생성</h3>', unsafe_allow_html=True)
+    st.markdown('<h3><span style="font-size: 1.5em;">📄</span> 3. 작업일보 생성</h3>', unsafe_allow_html=True)
     
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -3808,12 +3516,13 @@ with st.container():
         selected_template_option = st.selectbox(
             "템플릿 선택",
             options=template_options,
-            index=0
+            index=0,
+            label_visibility="collapsed"
         )
     
     with col2:
-        # 템플릿 업로드 버튼
-        if st.button("📤 템플릿 업로드", key="upload_template", use_container_width=True):
+        # 템플릿 업로드 버튼 (저장/불러오기와 같은 스타일)
+        if st.button("📤 템플릿 업로드", key="upload_template"):
             st.session_state.show_template_upload = True
             st.rerun()
     
@@ -3952,11 +3661,11 @@ with st.container():
                         del st.session_state.mapping_load_success
                         del st.session_state.mapping_load_message
         
-        # 공사일보 생성 버튼
+        # 작업일보 생성 버튼
         st.markdown("---")
         
-        # 공사일보 생성 버튼 (전체 너비)
-        if st.button("📊 공사일보 생성", key="create_report", use_container_width=True):
+        # 작업일보 생성 버튼 (전체 너비)
+        if st.button("📊 작업일보 생성", key="create_report", use_container_width=True, type="primary"):
             # 템플릿이 있는 경우 기본값 설정 (검증 없이)
             if template_bytes:
                 # 기본값 설정
@@ -3968,8 +3677,8 @@ with st.container():
                     'precipitation_cell': 'o6',
                     'planned_progress_cell': 'w4',
                     'actual_progress_cell': 'w5',
-                    'table_construction_cell': 'q8',
-                    'table_work_cell': 'q11',
+                    'table_construction_cell': 'AC10',
+                    'table_work_cell': 'AC48',
                     'table_personnel_cell': 'ac66',
                     'table_equipment_cell': 'ac106'
                 }
@@ -3979,7 +3688,8 @@ with st.container():
                     if not st.session_state.get(key):
                         st.session_state[key] = default_value
             
-            with st.spinner('📊 공사일보를 생성하고 있습니다...'):
+            # 로딩 중일 때만 표시
+            with st.spinner(""):
                 try:
                     # 기본 정보 준비 (1단계 결과 사용)
                     # 1단계에서 추출된 날짜 사용
@@ -4140,11 +3850,21 @@ with st.container():
                             col1, col2 = st.columns(2)
                             with col1:
                                 # 저장 버튼 상태에 따른 텍스트 변경
-                                save_button_text = "💾 Supabase에 저장"
-                                if hasattr(st.session_state, 'daily_report_saved') and st.session_state.daily_report_saved:
+                                # 저장 버튼 텍스트 설정
+                                if st.session_state.get('daily_report_saved', False):
                                     save_button_text = "✅ 저장 완료"
+                                else:
+                                    save_button_text = "💾 Database에 저장"
                                 
-                                save_button_clicked = st.button(save_button_text, key="save_to_supabase", use_container_width=True)
+                                # 저장 버튼 (이미 저장된 경우 비활성화)
+                                save_button_clicked = st.button(
+                                    save_button_text, 
+                                    key="save_to_supabase", 
+                                    use_container_width=True,
+                                    disabled=st.session_state.get('daily_report_saved', False)
+                                )
+                                
+                                # 저장 버튼 클릭 시 처리 (초기화 방지)
                                 if save_button_clicked:
                                     # 저장 진행 상태 표시
                                     with st.status("💾 Supabase 저장 중...", expanded=True) as status:
@@ -4156,8 +3876,6 @@ with st.container():
                                             st.error(f"❌ Supabase 연결 실패: {connection_message}")
                                             status.update(label="❌ 저장 실패 - 연결 오류", state="error")
                                         else:
-                                            st.success("✅ Supabase 연결 성공!")
-                                            
                                             # 테이블 존재 여부 확인
                                             table_exists, table_message = check_daily_report_data_table()
                                             if not table_exists:
@@ -4177,39 +3895,84 @@ with st.container():
                                             
                                             # 저장 시도
                                             try:
-                                                # 저장할 데이터 준비 (엑셀 파일에서 추출된 셀 데이터만)
-                                                st.write("🔍 3단계 엑셀 파일에서 추출된 셀 데이터를 저장합니다.")
-                                                report_data = {
-                                                    "시공현황": tables_data.get("시공현황"),
-                                                    "작업내용": tables_data.get("작업내용"),
-                                                    "인원": tables_data.get("인원"),
-                                                    "장비": tables_data.get("장비"),
-                                                    "기본정보": basic_info,
-                                                    "excel_bytes": excel_bytes  # 엑셀 파일 바이트 추가
-                                                }
+                                                # 저장할 데이터 준비
+                                                st.write("🔍 저장할 데이터를 준비합니다...")
                                                 
-                                                st.write(f"🔍 저장할 데이터 준비 완료: {list(report_data.keys())}")
-                                                
-                                                work_date = basic_info['date']
-                                                st.write(f"🔍 저장할 날짜: {work_date}")
-                                                
-                                                save_result = save_to_supabase("daily_report", report_data, work_date)
-                                                
-                                                if save_result:
-                                                    st.session_state.daily_report_saved = True
-                                                    st.session_state.save_success_message = "🎉 작업일보가 Supabase에 성공적으로 저장되었습니다!"
-                                                    st.session_state.save_success_date = work_date
-                                                    status.update(label="✅ 저장 완료!", state="complete")
-                                                    st.success("🎉 작업일보가 Supabase에 성공적으로 저장되었습니다!")
-                                                    st.balloons()
-                                                    st.toast("💾 Supabase 저장 완료!", icon="✅")
+                                                # tables_data가 None이 아닌지 확인
+                                                if not tables_data:
+                                                    st.error("❌ tables_data가 None입니다. 1단계를 먼저 완료해주세요.")
+                                                    status.update(label="❌ 저장 실패 - 데이터 없음", state="error")
                                                 else:
-                                                    st.session_state.daily_report_saved = False
-                                                    st.session_state.save_error_message = "❌ Supabase 저장에 실패했습니다."
-                                                    status.update(label="❌ 저장 실패", state="error")
-                                                    st.error("❌ Supabase 저장에 실패했습니다.")
-                                                    st.info("💡 네트워크 연결이나 Supabase 설정을 확인해주세요.")
-                                                    st.toast("❌ 저장 실패", icon="❌")
+                                                    # 각 테이블 데이터 확인
+                                                    st.write(f"🔍 시공현황: {type(tables_data.get('시공현황'))}")
+                                                    if tables_data.get('시공현황') is not None:
+                                                        st.write(f"🔍 시공현황 데이터: {len(tables_data.get('시공현황'))}행")
+                                                    st.write(f"🔍 작업내용: {type(tables_data.get('작업내용'))}")
+                                                    if tables_data.get('작업내용') is not None:
+                                                        st.write(f"🔍 작업내용 데이터: {len(tables_data.get('작업내용'))}행")
+                                                    st.write(f"🔍 인원: {type(tables_data.get('인원'))}")
+                                                    if tables_data.get('인원') is not None:
+                                                        st.write(f"🔍 인원 데이터: {len(tables_data.get('인원'))}행")
+                                                    st.write(f"🔍 장비: {type(tables_data.get('장비'))}")
+                                                    if tables_data.get('장비') is not None:
+                                                        st.write(f"🔍 장비 데이터: {len(tables_data.get('장비'))}행")
+                                                    
+                                                    # 데이터 구조 상세 확인
+                                                    st.write("🔍 데이터 구조 상세:")
+                                                    for key, value in tables_data.items():
+                                                        if value is not None:
+                                                            st.write(f"  - {key}: {type(value)}, {len(value) if hasattr(value, '__len__') else 'N/A'}")
+                                                        else:
+                                                            st.write(f"  - {key}: None")
+                                                    
+                                                    report_data = {
+                                                        "시공현황": tables_data.get("시공현황"),
+                                                        "작업내용": tables_data.get("작업내용"),
+                                                        "인원": tables_data.get("인원"),
+                                                        "장비": tables_data.get("장비"),
+                                                        "기본정보": basic_info,
+                                                        "excel_bytes": excel_bytes
+                                                    }
+                                                    
+                                                    st.write(f"🔍 저장할 데이터 준비 완료: {list(report_data.keys())}")
+                                                    
+                                                    work_date = basic_info['date']
+                                                    st.write(f"🔍 저장할 날짜: {work_date}")
+                                                    
+                                                    # 데이터 유효성 검사 (더 상세하게)
+                                                    missing_data = []
+                                                    if not report_data.get("시공현황"):
+                                                        missing_data.append("시공현황")
+                                                    if not report_data.get("인원"):
+                                                        missing_data.append("인원")
+                                                    if not report_data.get("장비"):
+                                                        missing_data.append("장비")
+                                                    
+                                                    if missing_data:
+                                                        st.error(f"❌ 필수 데이터가 누락되었습니다: {', '.join(missing_data)}")
+                                                        st.error("❌ 1단계 AI 데이터 추출을 먼저 완료해주세요.")
+                                                        status.update(label="❌ 저장 실패 - 데이터 누락", state="error")
+                                                    else:
+                                                        st.write("🔍 Supabase 저장을 시작합니다...")
+                                                        st.write(f"🔍 전달할 데이터 타입: {type(report_data)}")
+                                                        st.write(f"🔍 전달할 데이터 키: {list(report_data.keys())}")
+                                                        save_result = save_to_supabase("daily_report", report_data, work_date)
+                                                        
+                                                        # 저장 결과 처리 (리셋 방지)
+                                                        if save_result:
+                                                            st.session_state.daily_report_saved = True
+                                                            st.session_state.save_success_message = "🎉 작업일보가 Supabase에 성공적으로 저장되었습니다!"
+                                                            st.session_state.save_success_date = work_date
+                                                            status.update(label="✅ 저장 완료!", state="complete")
+                                                            st.success("🎉 작업일보가 Supabase에 성공적으로 저장되었습니다!")
+                                                            st.info(f"📅 저장된 날짜: {work_date}")
+                                                            # 리셋 방지: st.balloons()와 st.toast() 제거
+                                                        else:
+                                                            st.session_state.daily_report_saved = False
+                                                            st.session_state.save_error_message = "❌ Supabase 저장에 실패했습니다."
+                                                            status.update(label="❌ 저장 실패", state="error")
+                                                            st.error("❌ Supabase 저장에 실패했습니다.")
+                                                            st.info("💡 네트워크 연결이나 Supabase 설정을 확인해주세요.")
                                                     
                                             except Exception as save_error:
                                                 status.update(label="❌ 저장 중 오류 발생", state="error")

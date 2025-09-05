@@ -20,6 +20,10 @@ google-generativeai>=0.3.0
 pdfplumber>=0.9.0
 pdf2image>=1.16.0
 
+# PDF를 이미지로 변환
+PyMuPDF>=1.23.0
+Pillow>=10.0.0
+
 # 엑셀 및 보고서 생성
 openpyxl>=3.1.0
 reportlab>=4.0.0
@@ -31,3 +35,13 @@ urllib3>=1.26.0
 
 # 데이터 시각화
 plotly>=5.15.0
+
+# 지도 및 좌표계 변환
+folium>=0.14.0
+streamlit-folium>=0.13.0
+pyproj>=3.5.0
+
+# CAD 파일 처리
+ezdxf>=1.0.0
+
+
